@@ -1,0 +1,4 @@
+.env
+work/*.log
+data/_local_backup/
+__pycache__/
