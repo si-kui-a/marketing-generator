@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>婚紗行銷文案生成系統</title>
+<style>
+  body { font-family: system-ui, "Microsoft JhengHei", sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  h1 { font-size: 1.3rem; }
+  fieldset { border: 1px solid #ccc; border-radius: 6px; margin-bottom: 1rem; }
+  label { display: block; margin: .5rem 0 .2rem; }
+  select, input[type=number] { padding: .3rem; min-width: 12rem; }
+  button { padding: .5rem 1.2rem; cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: .5; }
+  #status { padding: .4rem .8rem; border-radius: 4px; display: inline-block; margin-bottom: 1rem; font-size: .9rem; }
+  .ok { background: #e6f4ea; color: #137333; }
+  .bad { background: #fce8e6; color: #a50e0e; }
+  .card { border: 1px solid #ddd; border-radius: 6px; padding: 1rem; margin: 1rem 0; white-space: pre-wrap; }
+  .card header { font-weight: bold; margin-bottom: .5rem; display: flex; justify-content: space-between; }
+  .warn { color: #a50e0e; }
+  footer { margin-top: 2rem; font-size: .8rem; color: #888; }
+</style>
+</head>
+<body>
+<h1>婚紗行銷文案生成系統</h1>
+<div id="status" class="bad">連線檢查中…</div>
+<fieldset>
+  <legend>生成設定</legend>
+  <label for="brand">品牌</label>
+  <select id="brand"></select>
+  <label for="adtype">廣告類型</label>
+  <select id="adtype">
+    <option value="ig">IG</option>
+    <option value="fb">FB</option>
+    <option value="seo">SEO</option>
+  </select>
+  <label for="versions">版本數(1–5)</label>
+  <input id="versions" type="number" min="1" max="5" value="3">
+  <p><button id="go" disabled>生成</button></p>
+</fieldset>
+<div id="warnbox" class="warn"></div>
+<div id="results"></div>
+<footer>本工具之標籤建議功能為「關鍵字比對輔助標記」(頻率統計),非語意理解。生成結果須經人工檢視後才可使用。</footer>
+<script>
+const API = "http://localhost:8765";
+const $ = id => document.getElementById(id);
+async function checkServer() {
+  try {
+    const r = await fetch(API + "/brands");
+    const d = await r.json();
+    $("status").textContent = "已連線 localhost:8765";
+    $("status").className = "ok";
+    $("brand").innerHTML = d.brands.map(b => `<option>${b}</option>`).join("");
+    $("go").disabled = false;
+  } catch (e) {
+    $("status").textContent = "無法連線:請先雙擊啟動腳本或執行 python server.py,再重新整理本頁";
+    $("status").className = "bad";
+    $("go").disabled = true;
+  }
+}
+async function generate() {
+  $("go").disabled = true;
+  $("go").textContent = "生成中…";
+  $("warnbox").textContent = "";
+  $("results").innerHTML = "";
+  try {
+    const r = await fetch(API + "/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        brand: $("brand").value,
+        ad_type: $("adtype").value,
+        versions: parseInt($("versions").value, 10)
+      })
+    });
+    const d = await r.json();
+    if (!r.ok) { $("warnbox").textContent = "錯誤:" + (d.error || r.status); return; }
+    if (d.warning) $("warnbox").textContent = d.warning;
+    d.versions.forEach((v, i) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      const head = document.createElement("header");
+      head.textContent = "版本 " + (i + 1);
+      const btn = document.createElement("button");
+      btn.textContent = "複製";
+      btn.onclick = () => navigator.clipboard.writeText(v).then(() => btn.textContent = "已複製");
+      head.appendChild(btn);
+      card.appendChild(head);
+      card.appendChild(document.createTextNode(v));
+      $("results").appendChild(card);
+    });
+  } catch (e) {
+    $("warnbox").textContent = "連線失敗,請確認 server 是否運行中";
+  } finally {
+    $("go").disabled = false;
+    $("go").textContent = "生成";
+  }
+}
+$("go").onclick = generate;
+checkServer();
+</script>
+</body>
+</html>
