@@ -13,3 +13,4 @@
 2026-07-18 | prompts | wedding_ig.md | 驗收測試:確認 encoding=utf-8 修正後 auto git commit 回報正確狀態(內容未變更) | 觸發原因:UI 編輯器存檔
 2026-07-18 | 系統 | spec.md v2.0 | 架構從本地優先改為 GitHub 優先,data/ 目錄移除,Contents API 為資料層 | 觸發原因:多裝置同步需求
 2026-07-18 | prompts | wedding_ig.md | 驗收測試，將還原 | 觸發原因:UI 編輯器存檔
+2026-07-18 | prompts | wedding_ig.md | 驗收測試已還原原始內容 | 觸發原因:UI 編輯器存檔
