@@ -10,3 +10,4 @@
 <!-- 以下為範例格式,非真實紀錄,首次實際異動時刪除本行以下範例 -->
 <!-- 2026-07-20 | IG | wedding_ig.md v1.1 | 加強首句提問結構,降低純文字貼文比重 | 觸發原因:IG 降觸及公告 -->
 2026-07-18 | prompts | wedding_ig.md | 驗收測試:確認 prompts/save 與 auto git commit 功能正常(內容未變更) | 觸發原因:UI 編輯器存檔
+2026-07-18 | prompts | wedding_ig.md | 驗收測試:確認 encoding=utf-8 修正後 auto git commit 回報正確狀態(內容未變更) | 觸發原因:UI 編輯器存檔
