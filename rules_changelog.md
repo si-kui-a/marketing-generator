@@ -11,3 +11,4 @@
 <!-- 2026-07-20 | IG | wedding_ig.md v1.1 | 加強首句提問結構,降低純文字貼文比重 | 觸發原因:IG 降觸及公告 -->
 2026-07-18 | prompts | wedding_ig.md | 驗收測試:確認 prompts/save 與 auto git commit 功能正常(內容未變更) | 觸發原因:UI 編輯器存檔
 2026-07-18 | prompts | wedding_ig.md | 驗收測試:確認 encoding=utf-8 修正後 auto git commit 回報正確狀態(內容未變更) | 觸發原因:UI 編輯器存檔
+2026-07-18 | 系統 | spec.md v2.0 | 架構從本地優先改為 GitHub 優先,data/ 目錄移除,Contents API 為資料層 | 觸發原因:多裝置同步需求

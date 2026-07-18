@@ -11,39 +11,49 @@ header { background: #fff; border-bottom: 1px solid #ddd; padding: .8rem 1.5rem;
 header h1 { font-size: 1.1rem; margin: 0; }
 nav button { background: none; border: none; padding: .4rem .8rem; cursor: pointer; font-size: .95rem; border-radius: 4px; }
 nav button.active { background: #e8f0fe; color: #1a73e8; font-weight: bold; }
-#status { font-size: .85rem; margin-left: auto; padding: .3rem .7rem; border-radius: 4px; }
+#status { font-size: .85rem; padding: .3rem .7rem; border-radius: 4px; }
+#ghStatus { font-size: .85rem; padding: .3rem .7rem; border-radius: 4px; margin-left: .4rem; }
 .ok  { background: #e6f4ea; color: #137333; }
 .bad { background: #fce8e6; color: #a50e0e; }
-/* 啟動指令區塊 */
+.warn-badge { background: #fef7e0; color: #b06000; }
 #startupBar { background: #1e1e1e; color: #d4d4d4; padding: .6rem 1.5rem; font-size: .85rem; display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center; }
 #startupBar span { color: #888; margin-right: .3rem; }
 .cmd-line { display: flex; align-items: center; gap: .4rem; }
 .cmd-line code { background: #2d2d2d; padding: .15rem .5rem; border-radius: 3px; font-family: monospace; color: #9cdcfe; user-select: all; }
 .cmd-copy { background: #3a3a3a; border: none; color: #ccc; padding: .15rem .5rem; border-radius: 3px; cursor: pointer; font-size: .8rem; }
 .cmd-copy:hover { background: #555; }
-main { max-width: 820px; margin: 1.5rem auto; padding: 0 1rem; }
+main { max-width: 860px; margin: 1.5rem auto; padding: 0 1rem; }
 .tab { display: none; }
 .tab.active { display: block; }
 fieldset { border: 1px solid #ccc; border-radius: 6px; margin-bottom: 1rem; padding: .8rem 1rem; background: #fff; }
 legend { font-weight: bold; }
 label { display: block; margin: .5rem 0 .2rem; font-size: .9rem; }
-input[type=text], input[type=number], select, textarea {
-  width: 100%; padding: .4rem .6rem; border: 1px solid #ccc; border-radius: 4px; font-size: .95rem; font-family: inherit;
-}
+input[type=text], input[type=number], select, textarea { width: 100%; padding: .4rem .6rem; border: 1px solid #ccc; border-radius: 4px; font-size: .95rem; font-family: inherit; }
 textarea { resize: vertical; min-height: 80px; }
 button.primary { background: #1a73e8; color: #fff; border: none; padding: .5rem 1.2rem; border-radius: 4px; cursor: pointer; font-size: .95rem; }
 button.primary:disabled { opacity: .5; cursor: not-allowed; }
-button.danger { background: #d93025; color: #fff; border: none; padding: .35rem .8rem; border-radius: 4px; cursor: pointer; font-size: .85rem; }
-button.ghost { background: none; border: 1px solid #ccc; padding: .35rem .8rem; border-radius: 4px; cursor: pointer; font-size: .85rem; }
+button.danger  { background: #d93025; color: #fff; border: none; padding: .35rem .8rem; border-radius: 4px; cursor: pointer; font-size: .85rem; }
+button.ghost   { background: none; border: 1px solid #ccc; padding: .35rem .8rem; border-radius: 4px; cursor: pointer; font-size: .85rem; }
 .card { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 1rem; margin: .8rem 0; white-space: pre-wrap; word-break: break-all; }
 .card header { display: flex; justify-content: space-between; align-items: center; font-weight: bold; margin-bottom: .5rem; white-space: normal; }
 .warn { color: #a50e0e; margin: .4rem 0; font-size: .9rem; }
 .info { color: #137333; margin: .4rem 0; font-size: .9rem; }
-.brand-item { display: flex; justify-content: space-between; align-items: center; padding: .5rem 0; border-bottom: 1px solid #eee; }
+.list-item { display: flex; justify-content: space-between; align-items: center; padding: .5rem 0; border-bottom: 1px solid #eee; }
 .extra-field { display: flex; gap: .5rem; margin-top: .4rem; }
-.extra-field input { flex: 1; }
+/* 模板卡片 */
+.prompt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .8rem; margin-bottom: 1rem; }
+.prompt-card { border: 2px solid #ddd; border-radius: 8px; padding: .8rem; cursor: pointer; transition: border-color .15s; background: #fff; }
+.prompt-card:hover { border-color: #1a73e8; }
+.prompt-card.selected { border-color: #1a73e8; background: #f0f6ff; }
+.prompt-card h3 { font-size: .9rem; margin: 0 0 .4rem; color: #1a73e8; }
+.prompt-card ul { margin: 0; padding-left: 1.1rem; font-size: .82rem; color: #555; }
+.prompt-card ul li { margin: .2rem 0; }
 #promptEditor { width: 100%; min-height: 320px; font-family: monospace; font-size: .9rem; }
-.style-item { display: flex; justify-content: space-between; align-items: center; padding: .4rem 0; border-bottom: 1px solid #eee; }
+/* 文風卡片 */
+.style-item { display: flex; justify-content: space-between; align-items: flex-start; padding: .6rem 0; border-bottom: 1px solid #eee; gap: .5rem; }
+.style-item .style-info { flex: 1; }
+.style-item strong { font-size: .95rem; }
+.style-item small { display: block; color: #666; font-size: .82rem; margin-top: .15rem; }
 footer { margin-top: 2rem; font-size: .8rem; color: #888; text-align: center; padding-bottom: 2rem; }
 </style>
 </head>
@@ -57,8 +67,8 @@ footer { margin-top: 2rem; font-size: .8rem; color: #888; text-align: center; pa
     <button onclick="switchTab('styles',this)">文風管理</button>
   </nav>
   <div id="status" class="bad">連線中…</div>
+  <div id="ghStatus" class="warn-badge">GitHub…</div>
 </header>
-<!-- 啟動指令常駐區塊 -->
 <div id="startupBar">
   <span>啟動指令:</span>
   <div class="cmd-line">
@@ -122,26 +132,53 @@ footer { margin-top: 2rem; font-size: .8rem; color: #888; text-align: center; pa
 <div id="tab-prompts" class="tab">
   <fieldset>
     <legend>選擇模板</legend>
-    <select id="promptSelect" onchange="loadPrompt()">
-      <option value="">— 選擇 —</option>
-      <option value="system_base.md">system_base.md(系統基底)</option>
-      <option value="wedding_ig.md">wedding_ig.md</option>
-      <option value="wedding_fb.md">wedding_fb.md</option>
-      <option value="wedding_seo.md">wedding_seo.md</option>
-    </select>
+    <div class="prompt-cards">
+      <div class="prompt-card" onclick="selectPrompt('system_base.md',this)">
+        <h3>系統基底</h3>
+        <ul>
+          <li>適用場景:所有廣告類型</li>
+          <li>目標:設定事實紅線與語氣基準</li>
+          <li>用途:修改品牌事實守則、禁用詞規範</li>
+        </ul>
+      </div>
+      <div class="prompt-card" onclick="selectPrompt('wedding_ig.md',this)">
+        <h3>IG 貼文</h3>
+        <ul>
+          <li>適用場景:Instagram 動態 / 限時動態</li>
+          <li>目標:停住滑動、引導私訊</li>
+          <li>用途:調整字數、首句結構、hashtag 數量</li>
+        </ul>
+      </div>
+      <div class="prompt-card" onclick="selectPrompt('wedding_fb.md',this)">
+        <h3>FB 貼文</h3>
+        <ul>
+          <li>適用場景:Facebook 動態牆</li>
+          <li>目標:敘事說服、觸及長輩決策者</li>
+          <li>用途:調整篇幅、段落結構、CTA 形式</li>
+        </ul>
+      </div>
+      <div class="prompt-card" onclick="selectPrompt('wedding_seo.md',this)">
+        <h3>SEO 文案</h3>
+        <ul>
+          <li>適用場景:官網文章、Google 搜尋結果</li>
+          <li>目標:提升搜尋排名、吸引點擊</li>
+          <li>用途:調整關鍵字密度、meta description 字數</li>
+        </ul>
+      </div>
+    </div>
   </fieldset>
   <fieldset id="promptEditBox" style="display:none">
     <legend id="promptEditTitle">編輯中</legend>
-    <label>異動摘要(將寫入 rules_changelog.md)</label>
+    <label>異動摘要(將寫入 rules_changelog.md 並 push GitHub)</label>
     <input id="promptSummary" type="text" placeholder="例:調整字數上限為 120 字">
     <label>模板內容</label>
-    <textarea id="promptEditor" placeholder="選擇模板後內容將載入此處,可直接編輯…"></textarea>
+    <textarea id="promptEditor" placeholder="選擇上方模板卡片後內容將載入此處…"></textarea>
     <p>
-      <button class="primary" onclick="savePrompt()">儲存並 git commit</button>
+      <button class="primary" onclick="savePrompt()">儲存並推送 GitHub</button>
       <span id="promptMsg" style="margin-left:.8rem;font-size:.9rem"></span>
     </p>
     <p style="font-size:.8rem;color:#888;margin-top:.2rem">
-      ⚠️ server 未連線時可在此編輯並暫存,連線後儲存才會寫入檔案與 git。
+      ⚠️ server 未連線時可在此編輯並暫存,連線後儲存才會寫入檔案與 GitHub。
     </p>
   </fieldset>
 </div>
@@ -153,7 +190,7 @@ footer { margin-top: 2rem; font-size: .8rem; color: #888; text-align: center; pa
     <input id="newStyleLabel" type="text" placeholder="例:日系清新">
     <label>參考範例文案(生成時附入 prompt 供文風參考,不會被複製)</label>
     <textarea id="newStyleExample" placeholder="貼入一段你喜歡的文案風格範例…"></textarea>
-    <p><button class="primary" onclick="addStyle()">新增文風</button></p>
+    <p><button class="primary" onclick="addStyle()">新增並備份至 GitHub</button></p>
     <div id="styleMsg"></div>
   </fieldset>
   <fieldset>
@@ -166,15 +203,12 @@ footer { margin-top: 2rem; font-size: .8rem; color: #888; text-align: center; pa
 <script>
 const API = "http://localhost:8765";
 const $ = id => document.getElementById(id);
-// ── 啟動指令複製 ─────────────────────────────────────────────────────────────
 function copyCmd(id, btn) {
-  const text = $(id).textContent;
-  navigator.clipboard.writeText(text).then(() => {
+  navigator.clipboard.writeText($(id).textContent).then(() => {
     btn.textContent = "已複製";
     setTimeout(() => btn.textContent = "複製", 1500);
   });
 }
-// ── 分頁切換 ─────────────────────────────────────────────────────────────────
 function switchTab(name, btn) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
   document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
@@ -183,7 +217,6 @@ function switchTab(name, btn) {
   if (name === "brands") loadBrandList();
   if (name === "styles") loadStyleList();
 }
-// ── 連線檢查 + 初始化 ────────────────────────────────────────────────────────
 async function init() {
   try {
     const r = await fetch(API + "/brands");
@@ -196,12 +229,28 @@ async function init() {
     $("status").textContent = "無法連線:請先執行 python server.py";
     $("status").className = "bad";
   }
+  checkGitHub();
   loadStyleOptions();
+}
+async function checkGitHub() {
+  try {
+    const r = await fetch(API + "/health");
+    const d = await r.json();
+    if (d.github) {
+      $("ghStatus").textContent = "GitHub ✓";
+      $("ghStatus").className = "ok";
+    } else {
+      $("ghStatus").textContent = "GitHub 未連線";
+      $("ghStatus").className = "bad";
+    }
+  } catch {
+    $("ghStatus").textContent = "GitHub 未知";
+    $("ghStatus").className = "warn-badge";
+  }
 }
 function populateBrandSelect(brands) {
   $("brand").innerHTML = brands.map(b => `<option>${b}</option>`).join("");
 }
-// ── 文風選單 ─────────────────────────────────────────────────────────────────
 async function loadStyleOptions() {
   try {
     const d = await (await fetch(API + "/styles")).json();
@@ -214,48 +263,35 @@ async function loadStyleOptions() {
     });
   } catch {}
 }
-// ── 生成文案 ─────────────────────────────────────────────────────────────────
 async function generate() {
-  $("go").disabled = true;
-  $("go").textContent = "生成中…";
-  $("warnbox").textContent = "";
-  $("results").innerHTML = "";
+  $("go").disabled = true; $("go").textContent = "生成中…";
+  $("warnbox").textContent = ""; $("results").innerHTML = "";
   try {
     const r = await fetch(API + "/generate", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
+      method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({
-        brand: $("brand").value,
-        ad_type: $("adtype").value,
+        brand: $("brand").value, ad_type: $("adtype").value,
         versions: parseInt($("versions").value, 10),
-        style_label: $("styleSelect").value,
-        style_free: $("styleFree").value.trim()
+        style_label: $("styleSelect").value, style_free: $("styleFree").value.trim()
       })
     });
     const d = await r.json();
     if (!r.ok) { $("warnbox").textContent = "錯誤:" + (d.error || r.status); return; }
     if (d.warning) $("warnbox").textContent = d.warning;
     d.versions.forEach((v, i) => {
-      const card = document.createElement("div");
-      card.className = "card";
-      const head = document.createElement("header");
-      head.textContent = "版本 " + (i + 1);
-      const btn = document.createElement("button");
-      btn.className = "ghost";
-      btn.textContent = "複製";
+      const card = document.createElement("div"); card.className = "card";
+      const head = document.createElement("header"); head.textContent = "版本 " + (i + 1);
+      const btn = document.createElement("button"); btn.className = "ghost"; btn.textContent = "複製";
       btn.onclick = () => navigator.clipboard.writeText(v).then(() => btn.textContent = "已複製");
-      head.appendChild(btn);
-      card.appendChild(head);
+      head.appendChild(btn); card.appendChild(head);
       card.appendChild(document.createTextNode(v));
       $("results").appendChild(card);
     });
   } catch { $("warnbox").textContent = "連線失敗"; }
   finally { $("go").disabled = false; $("go").textContent = "生成"; }
 }
-// ── 品牌管理 ─────────────────────────────────────────────────────────────────
 function addExtraField() {
-  const wrap = document.createElement("div");
-  wrap.className = "extra-field";
+  const wrap = document.createElement("div"); wrap.className = "extra-field";
   wrap.innerHTML = `
     <input type="text" placeholder="欄位名稱(如:禁用詞)" style="max-width:180px">
     <textarea placeholder="內容" style="flex:1;min-height:60px"></textarea>
@@ -268,58 +304,46 @@ async function createBrand() {
   const extras = [];
   document.querySelectorAll("#extraFields .extra-field").forEach(row => {
     const inputs = row.querySelectorAll("input, textarea");
-    const label = inputs[0].value.trim();
-    const content = inputs[1].value.trim();
+    const label = inputs[0].value.trim(), content = inputs[1].value.trim();
     if (label) extras.push({label, content});
   });
   const r = await fetch(API + "/brands/create", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-      name,
-      axis: $("newBrandAxis").value.trim(),
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({name, axis: $("newBrandAxis").value.trim(),
       reviews: $("newBrandReviews").value.trim(),
-      activity: $("newBrandActivity").value.trim(),
-      extras
-    })
+      activity: $("newBrandActivity").value.trim(), extras})
   });
   const d = await r.json();
   if (!r.ok) { $("brandMsg").innerHTML = `<span class="warn">${d.error}</span>`; return; }
-  $("brandMsg").innerHTML = `<span class="info">品牌「${name}」已新增</span>`;
-  $("newBrandName").value = "";
-  $("newBrandAxis").value = "";
-  $("newBrandReviews").value = "";
-  $("newBrandActivity").value = "";
+  $("brandMsg").innerHTML = `<span class="info">品牌「${name}」已新增並備份至 GitHub</span>`;
+  $("newBrandName").value = ""; $("newBrandAxis").value = "";
+  $("newBrandReviews").value = ""; $("newBrandActivity").value = "";
   $("extraFields").innerHTML = "";
   loadBrandList();
   const bd = await (await fetch(API + "/brands")).json();
   populateBrandSelect(bd.brands);
 }
 async function loadBrandList() {
-  const d = await (await fetch(API + "/brands")).json();
-  const el = $("brandList");
-  if (!d.brands.length) { el.textContent = "尚無品牌"; return; }
-  el.innerHTML = "";
-  d.brands.forEach(b => {
-    const row = document.createElement("div");
-    row.className = "brand-item";
-    row.innerHTML = `<span>${b}</span>`;
-    const btn = document.createElement("button");
-    btn.className = "danger";
-    btn.textContent = "刪除";
-    btn.onclick = () => confirmDelete(b, btn);
-    row.appendChild(btn);
-    el.appendChild(row);
-  });
+  try {
+    const d = await (await fetch(API + "/brands")).json();
+    const el = $("brandList");
+    if (!d.brands.length) { el.textContent = "尚無品牌"; return; }
+    el.innerHTML = "";
+    d.brands.forEach(b => {
+      const row = document.createElement("div"); row.className = "list-item";
+      row.innerHTML = `<span>${b}</span>`;
+      const btn = document.createElement("button"); btn.className = "danger";
+      btn.textContent = "刪除"; btn.onclick = () => confirmDelete(b, btn);
+      row.appendChild(btn); el.appendChild(row);
+    });
+  } catch { $("brandList").textContent = "載入失敗,請確認 server 已啟動"; }
 }
 let _deleteTarget = null;
 function confirmDelete(name, btn) {
   if (_deleteTarget === name) {
     fetch(API + "/brand/" + encodeURIComponent(name), {method: "DELETE"})
-      .then(r => r.json())
-      .then(() => {
-        _deleteTarget = null;
-        loadBrandList();
+      .then(r => r.json()).then(() => {
+        _deleteTarget = null; loadBrandList();
         fetch(API + "/brands").then(r => r.json()).then(d => populateBrandSelect(d.brands));
       });
   } else {
@@ -328,79 +352,95 @@ function confirmDelete(name, btn) {
         if (b.textContent === "確定刪除?") { b.textContent = "刪除"; b.style.background = ""; }
       });
     }
-    _deleteTarget = name;
-    btn.textContent = "確定刪除?";
-    btn.style.background = "#a50e0e";
+    _deleteTarget = name; btn.textContent = "確定刪除?"; btn.style.background = "#a50e0e";
   }
 }
-// ── 模板編輯 ─────────────────────────────────────────────────────────────────
-async function loadPrompt() {
-  const fn = $("promptSelect").value;
-  if (!fn) { $("promptEditBox").style.display = "none"; return; }
-  // 修正:立即顯示編輯區,不等 server 回應
+// ── 模板卡片 ──────────────────────────────────────────────────────────────────
+let _selectedPromptFile = null;
+function selectPrompt(fn, card) {
+  document.querySelectorAll(".prompt-card").forEach(c => c.classList.remove("selected"));
+  card.classList.add("selected");
+  _selectedPromptFile = fn;
+  loadPrompt(fn);
+}
+async function loadPrompt(fn) {
   $("promptEditTitle").textContent = "編輯中:" + fn;
-  $("promptSummary").value = "";
-  $("promptMsg").textContent = "";
-  $("promptEditor").value = "載入中…";
-  $("promptEditBox").style.display = "";
+  $("promptSummary").value = ""; $("promptMsg").textContent = "";
+  $("promptEditor").value = "載入中…"; $("promptEditBox").style.display = "";
   try {
     const r = await fetch(API + "/prompt/" + fn);
     if (!r.ok) {
       const d = await r.json();
-      $("promptEditor").value = "(載入失敗:" + (d.error || r.status) + ")\n\n請確認 server 已啟動後重新選擇模板。";
+      $("promptEditor").value = "(載入失敗:" + (d.error || r.status) + ")\n\n請確認 server 已啟動。";
       return;
     }
     const d = await r.json();
     $("promptEditor").value = d.content;
   } catch {
-    $("promptEditor").value = "(server 未連線,無法載入內容)\n\n請先執行 python server.py,再重新選擇模板。";
+    $("promptEditor").value = "(server 未連線,無法載入)\n\n請先執行 python server.py,再點選模板卡片。";
   }
 }
 async function savePrompt() {
-  const fn = $("promptSelect").value;
+  const fn = _selectedPromptFile;
+  if (!fn) { $("promptMsg").innerHTML = '<span class="warn">請先選擇模板</span>'; return; }
   const content = $("promptEditor").value;
-  const summary = $("promptSummary").value.trim() || "內容更新";
   if (content.startsWith("(")) { $("promptMsg").innerHTML = '<span class="warn">內容未載入,無法儲存</span>'; return; }
+  const summary = $("promptSummary").value.trim() || "內容更新";
   const r = await fetch(API + "/prompts/save", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
+    method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({filename: fn, content, summary})
   });
   const d = await r.json();
   if (!r.ok) { $("promptMsg").textContent = "錯誤:" + d.error; return; }
-  const gitStatus = d.git && d.git.git === "committed" ? "已 git commit" : "已存檔";
-  $("promptMsg").innerHTML = `<span class="info">✓ ${gitStatus}</span>`;
+  $("promptMsg").innerHTML = `<span class="info">✓ 已儲存並推送 GitHub</span>`;
 }
-// ── 文風管理 ─────────────────────────────────────────────────────────────────
+// ── 文風管理 ──────────────────────────────────────────────────────────────────
 async function loadStyleList() {
-  const d = await (await fetch(API + "/styles")).json();
-  const el = $("styleList");
-  const keys = Object.keys(d.styles);
-  if (!keys.length) { el.textContent = "尚無自訂文風"; return; }
-  el.innerHTML = "";
-  keys.forEach(k => {
-    const row = document.createElement("div");
-    row.className = "style-item";
-    const ex = d.styles[k] || "";
-    row.innerHTML = `<div><strong>${k}</strong>${ex ? '<br><small style="color:#666">' + ex.slice(0,60) + (ex.length>60?"…":"") + '</small>' : ""}</div>`;
-    el.appendChild(row);
-  });
+  try {
+    const d = await (await fetch(API + "/styles")).json();
+    const el = $("styleList");
+    const keys = Object.keys(d.styles);
+    if (!keys.length) { el.textContent = "尚無文風"; return; }
+    el.innerHTML = "";
+    keys.forEach(k => {
+      const row = document.createElement("div"); row.className = "style-item";
+      const info = document.createElement("div"); info.className = "style-info";
+      const ex = d.styles[k] || "";
+      info.innerHTML = `<strong>${k}</strong>${ex ? '<small>' + ex.slice(0,80) + (ex.length>80?"…":"") + '</small>' : ""}`;
+      const btn = document.createElement("button"); btn.className = "danger";
+      btn.textContent = "刪除"; btn.onclick = () => confirmStyleDelete(k, btn);
+      row.appendChild(info); row.appendChild(btn); el.appendChild(row);
+    });
+  } catch { $("styleList").textContent = "載入失敗"; }
+}
+let _deleteStyleTarget = null;
+function confirmStyleDelete(label, btn) {
+  if (_deleteStyleTarget === label) {
+    fetch(API + "/style/" + encodeURIComponent(label), {method: "DELETE"})
+      .then(r => r.json()).then(() => {
+        _deleteStyleTarget = null; loadStyleList(); loadStyleOptions();
+      });
+  } else {
+    if (_deleteStyleTarget) {
+      document.querySelectorAll("#styleList .danger").forEach(b => {
+        if (b.textContent === "確定刪除?") { b.textContent = "刪除"; b.style.background = ""; }
+      });
+    }
+    _deleteStyleTarget = label; btn.textContent = "確定刪除?"; btn.style.background = "#a50e0e";
+  }
 }
 async function addStyle() {
   const label = $("newStyleLabel").value.trim();
   if (!label) { $("styleMsg").textContent = "標籤名稱必填"; return; }
   const r = await fetch(API + "/styles/add", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
+    method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({label, example: $("newStyleExample").value.trim()})
   });
   const d = await r.json();
   if (!r.ok) { $("styleMsg").innerHTML = `<span class="warn">${d.error}</span>`; return; }
-  $("styleMsg").innerHTML = `<span class="info">文風「${label}」已新增</span>`;
-  $("newStyleLabel").value = "";
-  $("newStyleExample").value = "";
-  loadStyleList();
-  loadStyleOptions();
+  $("styleMsg").innerHTML = `<span class="info">文風「${label}」已新增並備份至 GitHub</span>`;
+  $("newStyleLabel").value = ""; $("newStyleExample").value = "";
+  loadStyleList(); loadStyleOptions();
 }
 init();
 </script>
