@@ -7,25 +7,30 @@
 <style>
 * { box-sizing: border-box; }
 body { font-family: system-ui,"Microsoft JhengHei",sans-serif; margin: 0; color: #222; background: #f8f8f8; }
-header { background: #fff; border-bottom: 1px solid #ddd; padding: .8rem 1.5rem; display: flex; align-items: center; gap: 1.5rem; }
+header { background: #fff; border-bottom: 1px solid #ddd; padding: .8rem 1.5rem; display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
 header h1 { font-size: 1.1rem; margin: 0; }
 nav button { background: none; border: none; padding: .4rem .8rem; cursor: pointer; font-size: .95rem; border-radius: 4px; }
 nav button.active { background: #e8f0fe; color: #1a73e8; font-weight: bold; }
 #status { font-size: .85rem; margin-left: auto; padding: .3rem .7rem; border-radius: 4px; }
-.ok { background: #e6f4ea; color: #137333; }
+.ok  { background: #e6f4ea; color: #137333; }
 .bad { background: #fce8e6; color: #a50e0e; }
+/* 啟動指令區塊 */
+#startupBar { background: #1e1e1e; color: #d4d4d4; padding: .6rem 1.5rem; font-size: .85rem; display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center; }
+#startupBar span { color: #888; margin-right: .3rem; }
+.cmd-line { display: flex; align-items: center; gap: .4rem; }
+.cmd-line code { background: #2d2d2d; padding: .15rem .5rem; border-radius: 3px; font-family: monospace; color: #9cdcfe; user-select: all; }
+.cmd-copy { background: #3a3a3a; border: none; color: #ccc; padding: .15rem .5rem; border-radius: 3px; cursor: pointer; font-size: .8rem; }
+.cmd-copy:hover { background: #555; }
 main { max-width: 820px; margin: 1.5rem auto; padding: 0 1rem; }
 .tab { display: none; }
 .tab.active { display: block; }
-fieldset { border: 1px solid #ccc; border-radius: 6px; margin-bottom: 1rem; padding: .8rem 1rem; }
+fieldset { border: 1px solid #ccc; border-radius: 6px; margin-bottom: 1rem; padding: .8rem 1rem; background: #fff; }
 legend { font-weight: bold; }
 label { display: block; margin: .5rem 0 .2rem; font-size: .9rem; }
 input[type=text], input[type=number], select, textarea {
   width: 100%; padding: .4rem .6rem; border: 1px solid #ccc; border-radius: 4px; font-size: .95rem; font-family: inherit;
 }
 textarea { resize: vertical; min-height: 80px; }
-.row { display: flex; gap: .5rem; align-items: flex-end; }
-.row > * { flex: 1; }
 button.primary { background: #1a73e8; color: #fff; border: none; padding: .5rem 1.2rem; border-radius: 4px; cursor: pointer; font-size: .95rem; }
 button.primary:disabled { opacity: .5; cursor: not-allowed; }
 button.danger { background: #d93025; color: #fff; border: none; padding: .35rem .8rem; border-radius: 4px; cursor: pointer; font-size: .85rem; }
@@ -53,6 +58,18 @@ footer { margin-top: 2rem; font-size: .8rem; color: #888; text-align: center; pa
   </nav>
   <div id="status" class="bad">連線中…</div>
 </header>
+<!-- 啟動指令常駐區塊 -->
+<div id="startupBar">
+  <span>啟動指令:</span>
+  <div class="cmd-line">
+    <code id="cmd1">cd C:\Projects\marketing-generator</code>
+    <button class="cmd-copy" onclick="copyCmd('cmd1',this)">複製</button>
+  </div>
+  <div class="cmd-line">
+    <code id="cmd2">python server.py</code>
+    <button class="cmd-copy" onclick="copyCmd('cmd2',this)">複製</button>
+  </div>
+</div>
 <main>
 <!-- ── 生成文案 ── -->
 <div id="tab-generate" class="tab active">
@@ -118,10 +135,13 @@ footer { margin-top: 2rem; font-size: .8rem; color: #888; text-align: center; pa
     <label>異動摘要(將寫入 rules_changelog.md)</label>
     <input id="promptSummary" type="text" placeholder="例:調整字數上限為 120 字">
     <label>模板內容</label>
-    <textarea id="promptEditor"></textarea>
+    <textarea id="promptEditor" placeholder="選擇模板後內容將載入此處,可直接編輯…"></textarea>
     <p>
       <button class="primary" onclick="savePrompt()">儲存並 git commit</button>
       <span id="promptMsg" style="margin-left:.8rem;font-size:.9rem"></span>
+    </p>
+    <p style="font-size:.8rem;color:#888;margin-top:.2rem">
+      ⚠️ server 未連線時可在此編輯並暫存,連線後儲存才會寫入檔案與 git。
     </p>
   </fieldset>
 </div>
@@ -146,6 +166,14 @@ footer { margin-top: 2rem; font-size: .8rem; color: #888; text-align: center; pa
 <script>
 const API = "http://localhost:8765";
 const $ = id => document.getElementById(id);
+// ── 啟動指令複製 ─────────────────────────────────────────────────────────────
+function copyCmd(id, btn) {
+  const text = $(id).textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = "已複製";
+    setTimeout(() => btn.textContent = "複製", 1500);
+  });
+}
 // ── 分頁切換 ─────────────────────────────────────────────────────────────────
 function switchTab(name, btn) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
@@ -264,7 +292,6 @@ async function createBrand() {
   $("newBrandActivity").value = "";
   $("extraFields").innerHTML = "";
   loadBrandList();
-  // 同步更新生成頁面的品牌選單
   const bd = await (await fetch(API + "/brands")).json();
   populateBrandSelect(bd.brands);
 }
@@ -288,7 +315,6 @@ async function loadBrandList() {
 let _deleteTarget = null;
 function confirmDelete(name, btn) {
   if (_deleteTarget === name) {
-    // 第二次確認 → 執行刪除
     fetch(API + "/brand/" + encodeURIComponent(name), {method: "DELETE"})
       .then(r => r.json())
       .then(() => {
@@ -297,15 +323,13 @@ function confirmDelete(name, btn) {
         fetch(API + "/brands").then(r => r.json()).then(d => populateBrandSelect(d.brands));
       });
   } else {
-    // 第一次:改按鈕文字提示二次確認
     if (_deleteTarget) {
-      // 重設上次未完成的刪除
       document.querySelectorAll(".danger").forEach(b => {
-        if (b.textContent === "確定刪除？") b.textContent = "刪除";
+        if (b.textContent === "確定刪除?") { b.textContent = "刪除"; b.style.background = ""; }
       });
     }
     _deleteTarget = name;
-    btn.textContent = "確定刪除？";
+    btn.textContent = "確定刪除?";
     btn.style.background = "#a50e0e";
   }
 }
@@ -313,19 +337,30 @@ function confirmDelete(name, btn) {
 async function loadPrompt() {
   const fn = $("promptSelect").value;
   if (!fn) { $("promptEditBox").style.display = "none"; return; }
-  const r = await fetch(API + "/prompt/" + fn);
-  const d = await r.json();
-  if (!r.ok) { alert(d.error); return; }
-  $("promptEditor").value = d.content;
+  // 修正:立即顯示編輯區,不等 server 回應
   $("promptEditTitle").textContent = "編輯中:" + fn;
   $("promptSummary").value = "";
   $("promptMsg").textContent = "";
+  $("promptEditor").value = "載入中…";
   $("promptEditBox").style.display = "";
+  try {
+    const r = await fetch(API + "/prompt/" + fn);
+    if (!r.ok) {
+      const d = await r.json();
+      $("promptEditor").value = "(載入失敗:" + (d.error || r.status) + ")\n\n請確認 server 已啟動後重新選擇模板。";
+      return;
+    }
+    const d = await r.json();
+    $("promptEditor").value = d.content;
+  } catch {
+    $("promptEditor").value = "(server 未連線,無法載入內容)\n\n請先執行 python server.py,再重新選擇模板。";
+  }
 }
 async function savePrompt() {
   const fn = $("promptSelect").value;
   const content = $("promptEditor").value;
   const summary = $("promptSummary").value.trim() || "內容更新";
+  if (content.startsWith("(")) { $("promptMsg").innerHTML = '<span class="warn">內容未載入,無法儲存</span>'; return; }
   const r = await fetch(API + "/prompts/save", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
