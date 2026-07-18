@@ -102,13 +102,15 @@ def _gh_list(env, prefix):
     url = "https://api.github.com/repos/%s/contents/%s?ref=%s" % (repo, prefix.rstrip("/"), branch)
     req = urllib.request.Request(url, headers=_gh_headers(token))
     try:
-        with urllib.request.urlopen(req, timeout=15) as r:
+        with urllib.request.urlopen(req, timeout=8) as r:
             items = json.loads(r.read().decode("utf-8"))
         return [i["name"] for i in items if i["type"] == "file"]
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return []
         raise RuntimeError("GitHub API %d" % e.code)
+    except OSError:
+        raise RuntimeError("GitHub connection timeout")
 
 
 def _gh_put(env, path, content_str, message, sha=None):
@@ -158,7 +160,7 @@ def _gh_delete(env, path, message, sha):
 
 
 def _gh_check(env):
-    """快速檢查 token + repo 是否可用。"""
+    """快速檢查 token + repo 是否可用。timeout 硬上限 8 秒。"""
     if not env.get("GITHUB_TOKEN") or not env.get("GITHUB_REPO"):
         return False
     try:
@@ -296,7 +298,10 @@ class Handler(BaseHTTPRequestHandler):
         env = _load_env()
         if not env.get("GITHUB_TOKEN") or not env.get("GITHUB_REPO"):
             self._send(503, {"error": "GITHUB_TOKEN / GITHUB_REPO 未設定"}); return
-        files = _gh_list(env, GH_BRAND_PREFIX)
+        try:
+            files = _gh_list(env, GH_BRAND_PREFIX)
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
         names = sorted(
             f[len("brand-"):-len(".md")]
             for f in files
