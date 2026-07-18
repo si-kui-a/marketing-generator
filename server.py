@@ -9,7 +9,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 ROOT       = os.path.dirname(os.path.abspath(__file__))
 PROMPT_DIR = os.path.join(ROOT, "prompts")   # 模板仍保留本機(供離線編輯參考)
@@ -81,7 +81,7 @@ def _gh_get(env, path):
     branch = env.get("GITHUB_BRANCH", "master")
     if not token or not repo:
         raise RuntimeError("GITHUB_TOKEN 或 GITHUB_REPO 未設定")
-    url = "https://api.github.com/repos/%s/contents/%s?ref=%s" % (repo, path, branch)
+    url = "https://api.github.com/repos/%s/contents/%s?ref=%s" % (repo, quote(path, safe="/"), branch)
     req = urllib.request.Request(url, headers=_gh_headers(token))
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
@@ -99,7 +99,7 @@ def _gh_list(env, prefix):
     token = env.get("GITHUB_TOKEN", "")
     repo  = env.get("GITHUB_REPO", "")
     branch = env.get("GITHUB_BRANCH", "master")
-    url = "https://api.github.com/repos/%s/contents/%s?ref=%s" % (repo, prefix.rstrip("/"), branch)
+    url = "https://api.github.com/repos/%s/contents/%s?ref=%s" % (repo, quote(prefix.rstrip("/"), safe="/"), branch)
     req = urllib.request.Request(url, headers=_gh_headers(token))
     try:
         with urllib.request.urlopen(req, timeout=8) as r:
@@ -118,7 +118,7 @@ def _gh_put(env, path, content_str, message, sha=None):
     token  = env.get("GITHUB_TOKEN", "")
     repo   = env.get("GITHUB_REPO", "")
     branch = env.get("GITHUB_BRANCH", "master")
-    url    = "https://api.github.com/repos/%s/contents/%s" % (repo, path)
+    url    = "https://api.github.com/repos/%s/contents/%s" % (repo, quote(path, safe="/"))
     body   = {
         "message": message,
         "content": base64.b64encode(content_str.encode("utf-8")).decode("ascii"),
@@ -144,7 +144,7 @@ def _gh_delete(env, path, message, sha):
     token  = env.get("GITHUB_TOKEN", "")
     repo   = env.get("GITHUB_REPO", "")
     branch = env.get("GITHUB_BRANCH", "master")
-    url    = "https://api.github.com/repos/%s/contents/%s" % (repo, path)
+    url    = "https://api.github.com/repos/%s/contents/%s" % (repo, quote(path, safe="/"))
     body   = {"message": message, "sha": sha, "branch": branch}
     req = urllib.request.Request(
         url,
