@@ -15,3 +15,4 @@
 2026-07-18 | prompts | wedding_ig.md | 驗收測試，將還原 | 觸發原因:UI 編輯器存檔
 2026-07-18 | prompts | wedding_ig.md | 驗收測試已還原原始內容 | 觸發原因:UI 編輯器存檔
 2026-07-18 | prompts | wedding_ig.md | 驗收測試已還原原始內容(修正結尾換行) | 觸發原因:UI 編輯器存檔
+2026-07-18 | 系統 | spec.md v2.1 | 修正 GitHub 架構描述:本機 data/ 非獨立資料,為同一 repo 的安全網,§E 移除操作永久停用 | 觸發原因:§E 執行導致 GitHub 真實資料誤刪事故,已 revert

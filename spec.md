@@ -1,5 +1,5 @@
 # 婚紗行銷文案生成系統 — 交接規格書 (spec.md)
-version: 2.0
+version: 2.1
 
 > 本檔案為唯一真相來源。任何未來的 Claude session 接手此專案時,先讀此檔,再讀 `rules_changelog.md`,再動工。
 
@@ -18,7 +18,7 @@ version: 2.0
 
 | 原則 | 說明 |
 |---|---|
-| GitHub 優先 | 品牌、文風、模板資料統一存於 GitHub repo,透過 Contents API 讀寫;server.py 為唯一中介,金鑰不落瀏覽器 |
+| GitHub 優先 + 本機安全網 | 品牌、文風、模板資料經 Contents API 讀寫 GitHub repo;本機 data/ 目錄保留(git 追蹤),作為 API 中斷時的離線備援與版本歷史,非獨立於 GitHub 之外的第二份資料 |
 | 供應商中立 | 生成層透過 adapter 隔離,不綁定單一 AI 供應商,只需替換金鑰 + 選供應商類型 |
 | 誠實機制命名 | 規則比對稱「關鍵字比對輔助標記」,計數稱「頻率統計」,禁用「自主學習」「AI 分析」等會誤導預期的詞 |
 | 人工在迴圈中 | 任何機器產出的建議(標籤、預標記)必須經人工確認才落地,機器不自動決策 |
@@ -59,7 +59,10 @@ marketing-generator/
 │   ├── wedding_ig.md            # 含 version / last_algo_update 欄位
 │   ├── wedding_fb.md
 │   └── wedding_seo.md
-├── (data/ 本機目錄已移除,資料統一存於 GitHub repo)
+├── data/                        # 保留,git 追蹤;GitHub Contents API 讀寫的即是此目錄同步後的內容
+│   ├── brand/brand-XXX.md
+│   ├── archive/YYYY/日期-品牌-類型.md
+│   └── tag_frequency.json
 ├── rules_changelog.md           # 規則異動紀錄,含觸發原因
 ├── README.md
 └── spec.md                      # 本檔案

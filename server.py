@@ -416,7 +416,12 @@ class Handler(BaseHTTPRequestHandler):
     # ── GET /styles ───────────────────────────────────────────────────────────
     def _handle_get_styles(self):
         env = _load_env()
-        self._send(200, {"styles": _load_styles(env)})
+        if not env.get("GITHUB_TOKEN") or not env.get("GITHUB_REPO"):
+            self._send(503, {"error": "GITHUB_TOKEN / GITHUB_REPO 未設定"}); return
+        try:
+            self._send(200, {"styles": _load_styles(env)})
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e})
 
     # ── POST /styles/add ──────────────────────────────────────────────────────
     def _handle_style_add(self):
