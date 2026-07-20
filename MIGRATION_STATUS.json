@@ -1,0 +1,11 @@
+{
+  "data/brand": {
+    "history": [
+      {
+        "status": "moved",
+        "note": "git mv data/brand -> data/brand_deprecated",
+        "timestamp": "2026-07-21T02:29:40"
+      }
+    ]
+  }
+}
