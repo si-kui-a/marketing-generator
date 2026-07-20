@@ -1,0 +1,15 @@
+{
+  "brand_id": "test",
+  "style_id": "",
+  "ad_type_id": "",
+  "original_text": "原文",
+  "revised_text": "改文",
+  "category_tags": [
+    "封存測試標籤"
+  ],
+  "tag_source": "manual",
+  "sentence_marks": [],
+  "internal_structure_markup": "",
+  "version": 1,
+  "last_updated": "2026-07-21"
+}
