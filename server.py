@@ -351,6 +351,46 @@ def _update_stats_increment(env, category_tags, delta):
         _append_log("error.log", "stats_update_failed delta=%s: %s" % (delta, e))
 
 
+# ── 成效登記(Master Spec §6)───────────────────────────────────────────────────
+# 本系統目前唯一「巢狀於品牌底下」的collection(data/performance/{brand}/{copy_id}.json,
+# 而非扁平前綴),與 json_collection.Collection 的扁平路徑假設不符,故不使用該類別,
+# 直接複用既有 _gh_get/_gh_put/_gh_delete/_gh_list 底層邏輯處理巢狀路徑。
+GH_PERFORMANCE_PREFIX = "data/performance/"
+
+PERFORMANCE_DEFAULTS = {
+    "ad_type": "", "revision_case_id": "",
+    "date_range": {"start": "", "end": ""},
+    "spend": 0, "impressions": 0, "clicks": 0, "conversions": 0,
+    "custom_metrics": {}, "notes": "",
+}
+
+
+def _performance_path(brand_id, copy_id):
+    return "data/performance/%s/%s.json" % (brand_id, copy_id)
+
+
+def _performance_list(env, brand_id):
+    """列出該品牌所有copy_id。"""
+    files = _gh_list(env, "data/performance/%s/" % brand_id)
+    return sorted(f[:-5] for f in files if f.endswith(".json"))
+
+
+def _performance_create(env, brand_id, copy_id, data):
+    gh_path = _performance_path(brand_id, copy_id)
+    try:
+        _gh_get(env, gh_path)
+        raise FileExistsError("%s 已存在" % copy_id)
+    except FileNotFoundError:
+        pass
+    obj = dict(PERFORMANCE_DEFAULTS)
+    obj.update(data)
+    obj["copy_id"] = copy_id
+    obj.setdefault("version", 1)
+    content = json.dumps(obj, ensure_ascii=False, indent=2)
+    _gh_put(env, gh_path, content, "performance: add %s/%s [auto-backup]" % (brand_id, copy_id))
+    return obj
+
+
 # ── Handler ───────────────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, payload):
