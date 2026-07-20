@@ -1,0 +1,22 @@
+{
+  "platform": "Google Performance Max",
+  "characteristics": "目標為導引實體門市到訪，需綁定Google商家檔案，文案強調地點便利性/到店誘因。",
+  "length_guide": "同PMax標準規格",
+  "cta_style": "到店導向，如「立即導航前往」「到店享優惠」",
+  "sample_structure": [
+    "地點/便利性角度標題群",
+    "到店誘因描述",
+    "導航型CTA"
+  ],
+  "tags": [
+    "platform:Google",
+    "campaign_type:PMax",
+    "objective:來店型"
+  ],
+  "status": "active",
+  "_raw_paste_pending_review": "",
+  "type_id": "google_pmax_store",
+  "name": "Google PMax-來店型",
+  "version": 1,
+  "last_updated": "2026-07-21"
+}
