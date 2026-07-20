@@ -1,0 +1,14 @@
+{
+  "brand_id": "test",
+  "style_id": "",
+  "ad_type_id": "",
+  "original_text": "原文5",
+  "revised_text": "改文5",
+  "category_tags": [],
+  "tag_source": "manual",
+  "sentence_marks": [],
+  "internal_structure_markup": "",
+  "created_at": "2026-01-01T00:00:00",
+  "version": 1,
+  "last_updated": "2026-07-21"
+}
