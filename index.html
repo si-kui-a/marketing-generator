@@ -32,7 +32,13 @@ input[type=text], input[type=number], select, textarea { width: 100%; padding: .
 textarea { resize: vertical; min-height: 80px; }
 button.primary { background: #1a73e8; color: #fff; border: none; padding: .5rem 1.2rem; border-radius: 4px; cursor: pointer; font-size: .95rem; }
 button.primary:disabled { opacity: .5; cursor: not-allowed; }
-button.danger  { background: #d93025; color: #fff; border: none; padding: .35rem .8rem; border-radius: 4px; cursor: pointer; font-size: .85rem; }
+button.danger  { background: #d93025; color: #fff; border: none; padding: .35rem .8rem; border-radius: 4px; cursor: pointer; font-size: .85rem; position: relative; overflow: hidden; user-select: none; }
+button.danger.holding { background: #a50e0e; }
+button.danger.holding::after {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 100%;
+  background: rgba(255,255,255,.35); transform-origin: left; animation: holdfill 3s linear forwards;
+}
+@keyframes holdfill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 button.ghost   { background: none; border: 1px solid #ccc; padding: .35rem .8rem; border-radius: 4px; cursor: pointer; font-size: .85rem; }
 .card { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 1rem; margin: .8rem 0; white-space: pre-wrap; word-break: break-all; }
 .card header { display: flex; justify-content: space-between; align-items: center; font-weight: bold; margin-bottom: .5rem; white-space: normal; }
@@ -49,11 +55,13 @@ button.ghost   { background: none; border: 1px solid #ccc; padding: .35rem .8rem
 .prompt-card ul { margin: 0; padding-left: 1.1rem; font-size: .82rem; color: #555; }
 .prompt-card ul li { margin: .2rem 0; }
 #promptEditor { width: 100%; min-height: 320px; font-family: monospace; font-size: .9rem; }
-/* 文風卡片 */
-.style-item { display: flex; justify-content: space-between; align-items: flex-start; padding: .6rem 0; border-bottom: 1px solid #eee; gap: .5rem; }
-.style-item .style-info { flex: 1; }
-.style-item strong { font-size: .95rem; }
-.style-item small { display: block; color: #666; font-size: .82rem; margin-top: .15rem; }
+/* 文風 / 廣告類型卡片 */
+.style-item, .adtype-item { display: flex; justify-content: space-between; align-items: flex-start; padding: .6rem 0; border-bottom: 1px solid #eee; gap: .5rem; }
+.style-item .style-info, .adtype-item .adtype-info { flex: 1; }
+.style-item strong, .adtype-item strong { font-size: .95rem; }
+.style-item small, .adtype-item small { display: block; color: #666; font-size: .82rem; margin-top: .15rem; }
+.pending-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; background: #d93025; margin-right: .35rem; vertical-align: middle; }
+.raw-paste-view { white-space: pre-wrap; background: #f8f8f8; border: 1px solid #eee; border-radius: 4px; padding: .6rem; font-size: .85rem; margin-top: .4rem; }
 footer { margin-top: 2rem; font-size: .8rem; color: #888; text-align: center; padding-bottom: 2rem; }
 </style>
 </head>
@@ -65,6 +73,7 @@ footer { margin-top: 2rem; font-size: .8rem; color: #888; text-align: center; pa
     <button onclick="switchTab('brands',this)">品牌管理</button>
     <button onclick="switchTab('prompts',this)">模板編輯</button>
     <button onclick="switchTab('styles',this)">文風管理</button>
+    <button onclick="switchTab('adtypes',this)">廣告類型</button>
   </nav>
   <div id="status" class="bad">連線中…</div>
   <div id="ghStatus" class="warn-badge">GitHub…</div>
@@ -198,6 +207,22 @@ footer { margin-top: 2rem; font-size: .8rem; color: #888; text-align: center; pa
     <div id="styleList">載入中…</div>
   </fieldset>
 </div>
+<!-- ── 廣告類型 ── -->
+<div id="tab-adtypes" class="tab">
+  <fieldset>
+    <legend>新增廣告類型(快速貼上)</legend>
+    <label>廣告類型代號 (type_id,英文/數字,如 fb_feed_ad) *</label>
+    <input id="newAdTypeId" type="text" placeholder="fb_feed_ad">
+    <label>貼上原始描述(可留空,系統不做自動解析,僅保存供你之後手動分欄)</label>
+    <textarea id="newAdTypeRaw" placeholder="貼入任何未整理的廣告類型說明文字…"></textarea>
+    <p><button class="primary" onclick="createAdTypeQuick()">建立(待人工分欄)</button></p>
+    <div id="adTypeMsg"></div>
+  </fieldset>
+  <fieldset>
+    <legend>現有廣告類型</legend>
+    <div id="adTypeList">載入中…</div>
+  </fieldset>
+</div>
 </main>
 <footer>本工具之標籤建議功能為「關鍵字比對輔助標記」(頻率統計),非語意理解。生成結果須經人工檢視後才可使用。</footer>
 <script>
@@ -216,6 +241,21 @@ function switchTab(name, btn) {
   btn.classList.add("active");
   if (name === "brands") loadBrandList();
   if (name === "styles") loadStyleList();
+  if (name === "adtypes") loadAdTypeList();
+}
+// ── 按住3秒二次確認刪除(Master Spec §3.6,取代點兩次)────────────────────────
+function bindHoldToDelete(btn, onConfirm) {
+  let timer = null;
+  const HOLD_MS = 3000;
+  const start = () => {
+    btn.textContent = "按住3秒確認刪除"; btn.classList.add("holding");
+    timer = setTimeout(() => { onConfirm(); reset(); }, HOLD_MS);
+  };
+  const cancel = () => { clearTimeout(timer); reset(); };
+  const reset = () => { btn.textContent = "刪除"; btn.classList.remove("holding"); };
+  btn.addEventListener("mousedown", start);
+  btn.addEventListener("touchstart", start);
+  ["mouseup","mouseleave","touchend","touchcancel"].forEach(ev => btn.addEventListener(ev, cancel));
 }
 async function init() {
   try {
@@ -256,9 +296,9 @@ async function loadStyleOptions() {
     const d = await (await fetch(API + "/styles")).json();
     const sel = $("styleSelect");
     sel.innerHTML = '<option value="">— 不指定 —</option>';
-    Object.keys(d.styles).forEach(k => {
+    Object.keys(d.styles).forEach(styleId => {
       const o = document.createElement("option");
-      o.value = k; o.textContent = k;
+      o.value = styleId; o.textContent = d.styles[styleId].name || styleId;
       sel.appendChild(o);
     });
   } catch {}
@@ -333,27 +373,17 @@ async function loadBrandList() {
       const row = document.createElement("div"); row.className = "list-item";
       row.innerHTML = `<span>${b}</span>`;
       const btn = document.createElement("button"); btn.className = "danger";
-      btn.textContent = "刪除"; btn.onclick = () => confirmDelete(b, btn);
+      btn.textContent = "刪除";
+      bindHoldToDelete(btn, () => {
+        fetch(API + "/brand/" + encodeURIComponent(b), {method: "DELETE"})
+          .then(r => r.json()).then(() => {
+            loadBrandList();
+            fetch(API + "/brands").then(r => r.json()).then(d2 => populateBrandSelect(d2.brands));
+          });
+      });
       row.appendChild(btn); el.appendChild(row);
     });
   } catch { $("brandList").textContent = "載入失敗,請確認 server 已啟動"; }
-}
-let _deleteTarget = null;
-function confirmDelete(name, btn) {
-  if (_deleteTarget === name) {
-    fetch(API + "/brand/" + encodeURIComponent(name), {method: "DELETE"})
-      .then(r => r.json()).then(() => {
-        _deleteTarget = null; loadBrandList();
-        fetch(API + "/brands").then(r => r.json()).then(d => populateBrandSelect(d.brands));
-      });
-  } else {
-    if (_deleteTarget) {
-      document.querySelectorAll(".danger").forEach(b => {
-        if (b.textContent === "確定刪除?") { b.textContent = "刪除"; b.style.background = ""; }
-      });
-    }
-    _deleteTarget = name; btn.textContent = "確定刪除?"; btn.style.background = "#a50e0e";
-  }
 }
 // ── 模板卡片 ──────────────────────────────────────────────────────────────────
 let _selectedPromptFile = null;
@@ -399,35 +429,24 @@ async function loadStyleList() {
   try {
     const d = await (await fetch(API + "/styles")).json();
     const el = $("styleList");
-    const keys = Object.keys(d.styles);
-    if (!keys.length) { el.textContent = "尚無文風"; return; }
+    const ids = Object.keys(d.styles);
+    if (!ids.length) { el.textContent = "尚無文風"; return; }
     el.innerHTML = "";
-    keys.forEach(k => {
+    ids.forEach(styleId => {
+      const s = d.styles[styleId];
       const row = document.createElement("div"); row.className = "style-item";
       const info = document.createElement("div"); info.className = "style-info";
-      const ex = d.styles[k] || "";
-      info.innerHTML = `<strong>${k}</strong>${ex ? '<small>' + ex.slice(0,80) + (ex.length>80?"…":"") + '</small>' : ""}`;
+      const preview = s.sample_copy || (s.description !== "(待填)" ? s.description : "");
+      info.innerHTML = `<strong>${s.name || styleId}</strong>${preview ? '<small>' + preview.slice(0,80) + (preview.length>80?"…":"") + '</small>' : ""}`;
       const btn = document.createElement("button"); btn.className = "danger";
-      btn.textContent = "刪除"; btn.onclick = () => confirmStyleDelete(k, btn);
+      btn.textContent = "刪除";
+      bindHoldToDelete(btn, () => {
+        fetch(API + "/style/" + encodeURIComponent(styleId), {method: "DELETE"})
+          .then(r => r.json()).then(() => { loadStyleList(); loadStyleOptions(); });
+      });
       row.appendChild(info); row.appendChild(btn); el.appendChild(row);
     });
   } catch { $("styleList").textContent = "載入失敗"; }
-}
-let _deleteStyleTarget = null;
-function confirmStyleDelete(label, btn) {
-  if (_deleteStyleTarget === label) {
-    fetch(API + "/style/" + encodeURIComponent(label), {method: "DELETE"})
-      .then(r => r.json()).then(() => {
-        _deleteStyleTarget = null; loadStyleList(); loadStyleOptions();
-      });
-  } else {
-    if (_deleteStyleTarget) {
-      document.querySelectorAll("#styleList .danger").forEach(b => {
-        if (b.textContent === "確定刪除?") { b.textContent = "刪除"; b.style.background = ""; }
-      });
-    }
-    _deleteStyleTarget = label; btn.textContent = "確定刪除?"; btn.style.background = "#a50e0e";
-  }
 }
 async function addStyle() {
   const label = $("newStyleLabel").value.trim();
@@ -441,6 +460,52 @@ async function addStyle() {
   $("styleMsg").innerHTML = `<span class="info">文風「${label}」已新增並備份至 GitHub</span>`;
   $("newStyleLabel").value = ""; $("newStyleExample").value = "";
   loadStyleList(); loadStyleOptions();
+}
+// ── 廣告類型管理 ──────────────────────────────────────────────────────────────
+async function createAdTypeQuick() {
+  const type_id = $("newAdTypeId").value.trim();
+  if (!type_id) { $("adTypeMsg").textContent = "type_id 必填"; return; }
+  const r = await fetch(API + "/ad_types/create", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ type_id, raw_paste: $("newAdTypeRaw").value.trim() })
+  });
+  const d = await r.json();
+  if (!r.ok) { $("adTypeMsg").innerHTML = `<span class="warn">${d.error}</span>`; return; }
+  $("adTypeMsg").innerHTML = `<span class="info">已建立「${type_id}」,未自動解析,請至清單點開手動分欄</span>`;
+  $("newAdTypeId").value = ""; $("newAdTypeRaw").value = "";
+  loadAdTypeList();
+}
+async function loadAdTypeList() {
+  try {
+    const d = await (await fetch(API + "/ad_types")).json();
+    const el = $("adTypeList");
+    if (!d.ad_types.length) { el.textContent = "尚無廣告類型"; return; }
+    el.innerHTML = "";
+    for (const id of d.ad_types) {
+      const row = document.createElement("div"); row.className = "adtype-item";
+      const info = document.createElement("div"); info.className = "adtype-info";
+      info.innerHTML = `<strong>${id}</strong>`;
+      const btn = document.createElement("button"); btn.className = "danger";
+      btn.textContent = "刪除";
+      bindHoldToDelete(btn, () => {
+        fetch(API + "/ad_type/" + encodeURIComponent(id), {method: "DELETE"})
+          .then(r => r.json()).then(() => loadAdTypeList());
+      });
+      row.appendChild(info); row.appendChild(btn); el.appendChild(row);
+      // 未分欄項目(仍有 _raw_paste_pending_review 內容)顯示紅點與原始文字
+      try {
+        const detail = await (await fetch(API + "/ad_type/" + encodeURIComponent(id))).json();
+        const raw = detail.data && detail.data._raw_paste_pending_review;
+        if (raw) {
+          const dot = document.createElement("span"); dot.className = "pending-dot";
+          info.prepend(dot);
+          const rawView = document.createElement("div"); rawView.className = "raw-paste-view";
+          rawView.textContent = raw;
+          info.appendChild(rawView);
+        }
+      } catch {}
+    }
+  } catch { $("adTypeList").textContent = "載入失敗,請確認 server 已啟動"; }
 }
 init();
 </script>
