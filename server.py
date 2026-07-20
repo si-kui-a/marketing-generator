@@ -425,6 +425,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._handle_ad_type(path[len("/ad_type/"):])
             elif path == "/revisions":
                 self._handle_revisions()
+            elif path == "/revision_stats":
+                self._handle_revision_stats()
+            elif path == "/revision_stats/recompute":
+                self._handle_revision_stats_recompute()
             elif path.startswith("/revision/"):
                 self._handle_revision_get(path[len("/revision/"):])
             elif path == "/health":
@@ -808,6 +812,49 @@ class Handler(BaseHTTPRequestHandler):
         # §5.2 統計扣減(-1),僅使用者主動delete()觸發
         _update_stats_increment(env, existing.get("category_tags", []), -1)
         self._send(200, {"deleted": case_id})
+
+    # ── 標籤統計:GET /revision_stats,GET /revision_stats/recompute ──────────
+    def _handle_revision_stats(self):
+        env = _load_env()
+        if not env.get("GITHUB_TOKEN") or not env.get("GITHUB_REPO"):
+            self._send(503, {"error": "GITHUB_TOKEN / GITHUB_REPO 未設定"}); return
+        try:
+            content, _ = _gh_get(env, "data/revision_stats/summary.json")
+            self._send(200, json.loads(content))
+        except FileNotFoundError:
+            self._send(200, {"category_tag_counts": {}, "total_cases": 0,
+                              "last_updated": "", "last_recomputed_from_scratch": ""})
+
+    def _handle_revision_stats_recompute(self):
+        env = self._env_or_503()
+        if not env: return
+        try:
+            ids = revisions.list(env)
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        counts = {}
+        for cid in ids:
+            try:
+                data = revisions.get(env, cid)
+                for tag in data.get("category_tags", []):
+                    counts[tag] = counts.get(tag, 0) + 1
+            except (FileNotFoundError, ValueError):
+                continue  # 單筆讀取失敗不中斷整體重算
+        now = datetime.now().isoformat(timespec="seconds")
+        summary = {
+            "category_tag_counts": counts,
+            "total_cases": len(ids),
+            "last_updated": now,
+            "last_recomputed_from_scratch": now,
+        }
+        try:
+            _, sha = _gh_get(env, "data/revision_stats/summary.json")
+        except FileNotFoundError:
+            sha = None
+        _gh_put(env, "data/revision_stats/summary.json",
+                json.dumps(summary, ensure_ascii=False, indent=2),
+                "revision_stats: full recompute [manual]", sha)
+        self._send(200, {"recomputed": summary})
 
     # ── POST /generate ────────────────────────────────────────────────────────
     def _handle_generate(self):
