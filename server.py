@@ -320,6 +320,37 @@ def _check_retention_policy(env):
             continue  # 單筆失敗不影響其他筆
 
 
+# ── 標籤統計(Master Spec §5)──────────────────────────────────────────────────
+def _update_stats_increment(env, category_tags, delta):
+    """
+    delta:+1(建立時)或-1(使用者主動刪除時)。
+    失敗只記error.log,不拋出例外影響主流程(§A規則2:統計準確性次於案例資料完整性)。
+    矛盾修正#4:_check_retention_policy 的封存邏輯絕不呼叫此函式,封存不觸發統計異動。
+    """
+    try:
+        try:
+            content, sha = _gh_get(env, "data/revision_stats/summary.json")
+            summary = json.loads(content)
+        except FileNotFoundError:
+            summary, sha = {"category_tag_counts": {}, "total_cases": 0,
+                             "last_updated": "", "last_recomputed_from_scratch": ""}, None
+        counts = summary.setdefault("category_tag_counts", {})
+        for tag in category_tags:
+            new_val = counts.get(tag, 0) + delta
+            if new_val <= 0:
+                counts.pop(tag, None)
+            else:
+                counts[tag] = new_val
+        summary["total_cases"] = max(0, summary.get("total_cases", 0) + delta)
+        summary["last_updated"] = datetime.now().isoformat(timespec="seconds")
+        _gh_put(env, "data/revision_stats/summary.json",
+                json.dumps(summary, ensure_ascii=False, indent=2),
+                "revision_stats: %s tag counts [auto]" % ("increment" if delta > 0 else "decrement"),
+                sha)
+    except Exception as e:
+        _append_log("error.log", "stats_update_failed delta=%s: %s" % (delta, e))
+
+
 # ── Handler ───────────────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, payload):
@@ -753,6 +784,8 @@ class Handler(BaseHTTPRequestHandler):
             _check_retention_policy(env)
         except Exception as e:
             _append_log("error.log", "retention_policy_failed: %s" % e)
+        # §5.2 統計增量(+1)。矛盾修正#4:僅使用者主動create/delete觸發,封存不觸發。
+        _update_stats_increment(env, data.get("category_tags", []), +1)
         self._send(200, {"created": case_id, "data": obj})
 
     def _handle_revision_delete(self, case_id):
@@ -763,11 +796,17 @@ class Handler(BaseHTTPRequestHandler):
         if not env: return
         if self._degraded_or_503(): return
         try:
+            existing = revisions.get(env, case_id)  # 先讀,取得category_tags供扣減使用
+        except FileNotFoundError:
+            self._send(404, {"error": "revision not found"}); return
+        try:
             revisions.delete(env, case_id)
         except FileNotFoundError:
             self._send(404, {"error": "revision not found"}); return
         except RuntimeError as e:
             self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        # §5.2 統計扣減(-1),僅使用者主動delete()觸發
+        _update_stats_increment(env, existing.get("category_tags", []), -1)
         self._send(200, {"deleted": case_id})
 
     # ── POST /generate ────────────────────────────────────────────────────────
