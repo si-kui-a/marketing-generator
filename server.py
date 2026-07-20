@@ -1,20 +1,32 @@
 # server.py — 唯一對外溝通節點。零第三方依賴,僅 Python 標準庫。
-# v3 GitHub 優先架構:品牌、文風、模板資料統一經 GitHub Contents API 讀寫。
+# Phase1:local_kit.Collection 統一管理 brands/styles/ad_types,GitHub Contents API 為唯一正本。
 import base64
 import importlib
 import json
 import os
 import re
+import sys
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import quote, unquote
 
+# Windows 主控台預設編碼(如 zh-TW 的 cp950)無法輸出中文/emoji,強制 stdout/stderr
+# 走 UTF-8,避免 local_kit 或本檔案任何 print() 因主控台編碼而讓整個請求 500。
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
 ROOT       = os.path.dirname(os.path.abspath(__file__))
 PROMPT_DIR = os.path.join(ROOT, "prompts")   # 模板仍保留本機(供離線編輯參考)
 WORK_DIR   = os.path.join(ROOT, "work")
 CHANGELOG  = os.path.join(ROOT, "rules_changelog.md")
+
+sys.path.insert(0, os.path.join(ROOT, "local_kit"))
+from json_collection import Collection   # noqa: E402
+from config_loader import load_config    # noqa: E402
 
 AD_TYPES         = {"ig": "wedding_ig.md", "fb": "wedding_fb.md", "seo": "wedding_seo.md"}
 VALID_PERF_TAGS  = {"high", "low", "未標記"}
@@ -23,10 +35,32 @@ MAX_VERSIONS     = 5
 PROMPT_WHITELIST = set(AD_TYPES.values()) | {"system_base.md"}
 
 # GitHub Contents API paths
-GH_BRAND_PREFIX   = "data/brand/"
+GH_BRAND_PREFIX   = "data/brands/"
+GH_STYLE_PREFIX   = "data/styles/"
+GH_AD_TYPE_PREFIX = "data/ad_types/"
 GH_ARCHIVE_PREFIX = "data/archive/"
-GH_STYLES_PATH    = "config/styles.json"
 GH_TAG_FREQ_PATH  = "data/tag_frequency.json"
+
+# 已知中文標籤 → 固定 slug 對照表(Master Spec §3.2 第一層)。
+# 注意:本專案 spec §0 訂為「零依賴、純 Python 標準庫」,不可違反,故不引入 pypinyin
+# (§3.2 描述的第二層拼音轉換)。不在表中的標籤一律直接走第四層 timestamp fallback,
+# 犧牲slug可讀性以維持零依賴承諾,此為明確取捨,非遺漏。
+STYLE_SLUG_TABLE = {
+    "溫暖敘事": "warm_story",
+    "急迫促銷": "urgent_promo",
+    "輕奢質感": "luxury_refined",
+}
+
+BRAND_DEFAULTS = {
+    "positioning": "(待填)", "target_audience": "(待填)",
+    "selling_points": [], "legacy_notes": [],
+}
+STYLE_DEFAULTS = {"description": "(待填)", "sample_copy": ""}
+AD_TYPE_DEFAULTS = {
+    "platform": "(待填)", "characteristics": "(待填)", "length_guide": "(待填)",
+    "cta_style": "(待填)", "sample_structure": [], "tags": [], "status": "active",
+    "_raw_paste_pending_review": "",
+}
 
 
 # ── 工具 ──────────────────────────────────────────────────────────────────────
@@ -170,20 +204,6 @@ def _gh_check(env):
         return False
 
 
-def _load_styles(env):
-    try:
-        text, _ = _gh_get(env, GH_STYLES_PATH)
-        return json.loads(text)
-    except (FileNotFoundError, ValueError):
-        return {}
-
-
-def _save_styles(env, styles, sha=None):
-    text = json.dumps(styles, ensure_ascii=False, indent=2)
-    _gh_put(env, GH_STYLES_PATH, text,
-            "data: update styles.json [auto-backup]", sha)
-
-
 def _append_changelog_gh(env, line):
     """追加一行到 GitHub 上的 rules_changelog.md。"""
     try:
@@ -196,6 +216,27 @@ def _append_changelog_gh(env, line):
     # 同步本機
     with open(CHANGELOG, "a", encoding="utf-8") as f:
         f.write(line + "\n")
+
+
+# ── Collections ───────────────────────────────────────────────────────────────
+brands   = Collection(GH_BRAND_PREFIX, "brand_id", BRAND_DEFAULTS, _gh_get, _gh_put, _gh_delete, _gh_list)
+styles   = Collection(GH_STYLE_PREFIX, "style_id", STYLE_DEFAULTS, _gh_get, _gh_put, _gh_delete, _gh_list)
+ad_types = Collection(GH_AD_TYPE_PREFIX, "type_id", AD_TYPE_DEFAULTS, _gh_get, _gh_put, _gh_delete, _gh_list)
+
+
+def _make_style_id(env, label):
+    """label(中文標籤) → style_id(英文slug)。已知詞用固定表,否則 timestamp fallback,
+    碰撞則附加流水號。不引入 pypinyin(見 STYLE_SLUG_TABLE 註解)。"""
+    base = STYLE_SLUG_TABLE.get(label) or ("style_%d" % int(time.time()))
+    slug = base
+    n = 2
+    while True:
+        try:
+            styles.get(env, slug)
+        except FileNotFoundError:
+            return slug
+        slug = "%s_%d" % (base, n)
+        n += 1
 
 
 # ── Handler ───────────────────────────────────────────────────────────────────
@@ -234,6 +275,27 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return env
 
+    def _gh_env_or_503(self):
+        env = _load_env()
+        if not env.get("GITHUB_TOKEN") or not env.get("GITHUB_REPO"):
+            self._send(503, {"error": "GITHUB_TOKEN / GITHUB_REPO 未設定"})
+            return None
+        return env
+
+    def _degraded_or_503(self):
+        """Master Spec §2.2:遷移未 verified 時,所有寫入操作回 503,不提供繞過。"""
+        try:
+            config = load_config(ROOT, allow_degraded_start=True)
+        except FileNotFoundError:
+            return False
+        if config.get("_degraded_mode"):
+            self._send(503, {
+                "error": "系統處於降級模式(遷移未驗證完成),寫入操作暫停:%s"
+                         % config.get("_degraded_reason")
+            })
+            return True
+        return False
+
     def do_GET(self):
         try:
             path = unquote(self.path)
@@ -247,6 +309,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._handle_get_prompt(path[len("/prompt/"):])
             elif path == "/styles":
                 self._handle_get_styles()
+            elif path == "/ad_types":
+                self._handle_ad_types()
+            elif path.startswith("/ad_type/"):
+                self._handle_ad_type(path[len("/ad_type/"):])
             elif path == "/health":
                 env = _load_env()
                 self._send(200, {"github": _gh_check(env)})
@@ -272,6 +338,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._handle_prompt_save()
             elif path == "/styles/add":
                 self._handle_style_add()
+            elif path == "/ad_types/create":
+                self._handle_ad_type_create()
             else:
                 self._send(404, {"error": "not found"})
         except Exception as e:
@@ -286,6 +354,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._handle_brand_delete(path[len("/brand/"):])
             elif path.startswith("/style/"):
                 self._handle_style_delete(path[len("/style/"):])
+            elif path.startswith("/ad_type/"):
+                self._handle_ad_type_delete(path[len("/ad_type/"):])
             else:
                 self._send(404, {"error": "not found"})
         except Exception as e:
@@ -293,39 +363,37 @@ class Handler(BaseHTTPRequestHandler):
                 self.log_date_time_string(), self.path, repr(e)))
             self._send(500, {"error": "internal error"})
 
-    # ── GET /brands ───────────────────────────────────────────────────────────
+    # ── 品牌:GET /brands /brand/<id>,POST /brands/create,DELETE /brand/<id> ──
     def _handle_brands(self):
-        env = _load_env()
-        if not env.get("GITHUB_TOKEN") or not env.get("GITHUB_REPO"):
-            self._send(503, {"error": "GITHUB_TOKEN / GITHUB_REPO 未設定"}); return
+        env = self._gh_env_or_503()
+        if not env: return
         try:
-            files = _gh_list(env, GH_BRAND_PREFIX)
+            ids = brands.list(env)
         except RuntimeError as e:
             self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
-        names = sorted(
-            f[len("brand-"):-len(".md")]
-            for f in files
-            if f.startswith("brand-") and f.endswith(".md")
-        )
-        self._send(200, {"brands": names})
+        self._send(200, {"brands": sorted(ids)})
 
-    # ── GET /brand/<name> ─────────────────────────────────────────────────────
-    def _handle_brand(self, name):
-        if not _safe_brand_name(name):
+    def _handle_brand(self, brand_id):
+        if not _safe_brand_name(brand_id):
             self._send(400, {"error": "invalid brand name"}); return
-        env = _load_env()
+        env = self._gh_env_or_503()
+        if not env: return
         try:
-            content, _ = _gh_get(env, GH_BRAND_PREFIX + "brand-%s.md" % name)
-            self._send(200, {"name": name, "content": content})
+            data = brands.get(env, brand_id)
         except FileNotFoundError:
-            self._send(404, {"error": "brand not found"})
+            self._send(404, {"error": "brand not found"}); return
+        except ValueError as e:
+            self._send(500, {"error": str(e)}); return
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        self._send(200, data)
 
-    # ── POST /brands/create ───────────────────────────────────────────────────
     def _handle_brand_create(self):
         body, err = self._read_body()
         if err: self._send(400, {"error": err}); return
         env = self._env_or_503()
         if not env: return
+        if self._degraded_or_503(): return
         name     = body.get("name", "").strip()
         axis     = body.get("axis", "").strip()
         reviews  = body.get("reviews", "").strip()
@@ -333,47 +401,39 @@ class Handler(BaseHTTPRequestHandler):
         extras   = body.get("extras", [])
         if not _safe_brand_name(name):
             self._send(400, {"error": "invalid brand name"}); return
-        gh_path = GH_BRAND_PREFIX + "brand-%s.md" % name
+        legacy_notes = [
+            {"label": "Google 地圖評價", "content": reviews or "(待填)"},
+            {"label": "活動頁面文案", "content": activity or "(待填)"},
+        ] + [{"label": e.get("label", ""), "content": e.get("content", "") or "(待填)"}
+             for e in (extras if isinstance(extras, list) else []) if e.get("label")]
+        data = {"brand_id": name, "name": name, "positioning": axis or "(待填)"}
         try:
-            _gh_get(env, gh_path)
+            brands.create(env, name, data, extra_fields={"legacy_notes": legacy_notes})
+        except FileExistsError:
             self._send(409, {"error": "品牌已存在,請使用其他名稱"}); return
-        except FileNotFoundError:
-            pass
-        lines = [
-            "---", "brand_id: %s" % name, "status: 已填", "---", "",
-            "# %s" % name, "",
-            "## 本次文案主軸", axis or "(待填)", "",
-            "## Google 地圖評價", reviews or "(待填)", "",
-            "## 活動頁面文案", activity or "(待填)",
-        ]
-        for ex in (extras if isinstance(extras, list) else []):
-            label = str(ex.get("label", "")).strip()
-            if label:
-                lines += ["", "## %s" % label, str(ex.get("content", "")).strip() or "(待填)"]
-        content = "\n".join(lines) + "\n"
-        _gh_put(env, gh_path, content,
-                "brand: add %s [auto-backup]" % name)
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
         self._send(200, {"created": name})
 
-    # ── DELETE /brand/<name> ──────────────────────────────────────────────────
-    def _handle_brand_delete(self, name):
-        if not _safe_brand_name(name):
+    def _handle_brand_delete(self, brand_id):
+        if not _safe_brand_name(brand_id):
             self._send(400, {"error": "invalid brand name"}); return
-        env = _load_env()
-        gh_path = GH_BRAND_PREFIX + "brand-%s.md" % name
+        env = self._gh_env_or_503()
+        if not env: return
+        if self._degraded_or_503(): return
         try:
-            _, sha = _gh_get(env, gh_path)
+            brands.delete(env, brand_id)
         except FileNotFoundError:
             self._send(404, {"error": "brand not found"}); return
-        _gh_delete(env, gh_path, "brand: delete %s [auto-backup]" % name, sha)
-        self._send(200, {"deleted": name})
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        self._send(200, {"deleted": brand_id})
 
-    # ── GET /prompts ──────────────────────────────────────────────────────────
+    # ── 模板:GET /prompts /prompt/<f>,POST /prompts/save(本機,未受Phase1影響) ──
     def _handle_get_prompts(self):
         files = [f for f in os.listdir(PROMPT_DIR) if f.endswith(".md")]
         self._send(200, {"prompts": sorted(files)})
 
-    # ── GET /prompt/<filename> ────────────────────────────────────────────────
     def _handle_get_prompt(self, filename):
         if filename not in PROMPT_WHITELIST:
             self._send(403, {"error": "file not in whitelist"}); return
@@ -382,7 +442,6 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {"error": "prompt not found"}); return
         self._send(200, {"filename": filename, "content": _read_local(fp)})
 
-    # ── POST /prompts/save ────────────────────────────────────────────────────
     def _handle_prompt_save(self):
         body, err = self._read_body()
         if err: self._send(400, {"error": err}); return
@@ -395,11 +454,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(403, {"error": "file not in whitelist"}); return
         if not content.strip():
             self._send(400, {"error": "content is empty"}); return
-        # 寫本機
         fp = os.path.join(PROMPT_DIR, filename)
         with open(fp, "w", encoding="utf-8") as f:
             f.write(content)
-        # 同步 GitHub
         gh_path = "prompts/" + filename
         try:
             _, sha = _gh_get(env, gh_path)
@@ -407,55 +464,133 @@ class Handler(BaseHTTPRequestHandler):
             sha = None
         _gh_put(env, gh_path, content,
                 "prompts: %s — %s [auto-backup]" % (filename, summary), sha)
-        # changelog
         now  = datetime.now().strftime("%Y-%m-%d")
         line = "%s | prompts | %s | %s | 觸發原因:UI 編輯器存檔" % (now, filename, summary)
         _append_changelog_gh(env, line)
         self._send(200, {"saved": filename, "github": "pushed"})
 
-    # ── GET /styles ───────────────────────────────────────────────────────────
+    # ── 文風:GET /styles,POST /styles/add,DELETE /style/<id> ────────────────
     def _handle_get_styles(self):
-        env = _load_env()
-        if not env.get("GITHUB_TOKEN") or not env.get("GITHUB_REPO"):
-            self._send(503, {"error": "GITHUB_TOKEN / GITHUB_REPO 未設定"}); return
+        env = self._gh_env_or_503()
+        if not env: return
         try:
-            self._send(200, {"styles": _load_styles(env)})
+            ids = styles.list(env)
+            result = {}
+            for sid in ids:
+                try:
+                    data = styles.get(env, sid)
+                except ValueError:
+                    continue  # 單筆損毀不阻斷整體列表
+                result[sid] = {
+                    "name": data.get("name", sid),
+                    "description": data.get("description", ""),
+                    "sample_copy": data.get("sample_copy", ""),
+                }
         except RuntimeError as e:
-            self._send(502, {"error": "GitHub 連線失敗:%s" % e})
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        self._send(200, {"styles": result})
 
-    # ── POST /styles/add ──────────────────────────────────────────────────────
     def _handle_style_add(self):
         body, err = self._read_body()
         if err: self._send(400, {"error": err}); return
         env = self._env_or_503()
         if not env: return
+        if self._degraded_or_503(): return
         label   = body.get("label", "").strip()
         example = body.get("example", "").strip()
         if not label:
             self._send(400, {"error": "label is required"}); return
+        style_id = _make_style_id(env, label)
+        data = {"style_id": style_id, "name": label, "sample_copy": example}
         try:
-            text, sha = _gh_get(env, GH_STYLES_PATH)
-            styles = json.loads(text)
-        except FileNotFoundError:
-            styles, sha = {}, None
-        styles[label] = example
-        _save_styles(env, styles, sha)
-        self._send(200, {"added": label})
+            styles.create(env, style_id, data)
+        except FileExistsError:
+            self._send(409, {"error": "文風已存在"}); return
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        self._send(200, {"added": label, "style_id": style_id})
 
-    # ── DELETE /style/<label> ─────────────────────────────────────────────────
-    def _handle_style_delete(self, label):
-        label = unquote(label)
-        env   = _load_env()
+    def _handle_style_delete(self, style_id):
+        style_id = unquote(style_id)
+        if not _safe_filename(style_id):
+            self._send(400, {"error": "invalid style_id"}); return
+        env = self._gh_env_or_503()
+        if not env: return
+        if self._degraded_or_503(): return
         try:
-            text, sha = _gh_get(env, GH_STYLES_PATH)
-            styles = json.loads(text)
+            styles.delete(env, style_id)
         except FileNotFoundError:
-            self._send(404, {"error": "styles not found"}); return
-        if label not in styles:
             self._send(404, {"error": "style not found"}); return
-        del styles[label]
-        _save_styles(env, styles, sha)
-        self._send(200, {"deleted": label})
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        self._send(200, {"deleted": style_id})
+
+    # ── 廣告類型:GET /ad_types /ad_type/<id>,POST /ad_types/create,DELETE ──
+    def _handle_ad_types(self):
+        env = self._gh_env_or_503()
+        if not env: return
+        try:
+            ids = ad_types.list(env)
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        self._send(200, {"ad_types": sorted(ids)})
+
+    def _handle_ad_type(self, type_id):
+        if not _safe_filename(type_id):
+            self._send(400, {"error": "invalid type_id"}); return
+        env = self._gh_env_or_503()
+        if not env: return
+        try:
+            data = ad_types.get(env, type_id)
+        except FileNotFoundError:
+            self._send(404, {"error": "ad_type not found"}); return
+        except ValueError as e:
+            self._send(500, {"error": str(e)}); return
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        self._send(200, {"type_id": type_id, "data": data})
+
+    def _handle_ad_type_create(self):
+        body, err = self._read_body()
+        if err: self._send(400, {"error": err}); return
+        env = self._env_or_503()
+        if not env: return
+        if self._degraded_or_503(): return
+        type_id   = body.get("type_id", "").strip()
+        raw_paste = body.get("raw_paste", "").strip()
+        if not _safe_filename(type_id):
+            self._send(400, {"error": "invalid type_id"}); return
+        data = {
+            "type_id": type_id,
+            "name": body.get("name", "").strip() or "(待填)",
+            "platform": body.get("platform", "").strip() or "(待填)",
+            "characteristics": body.get("characteristics", "").strip() or "(待填)",
+            "length_guide": body.get("length_guide", "").strip() or "(待填)",
+            "cta_style": body.get("cta_style", "").strip() or "(待填)",
+            "sample_structure": body.get("sample_structure", []) or [],
+            "tags": body.get("tags", []) or [],
+        }
+        try:
+            ad_types.create(env, type_id, data, extra_fields={"_raw_paste_pending_review": raw_paste})
+        except FileExistsError:
+            self._send(409, {"error": "廣告類型已存在"}); return
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        self._send(200, {"created": type_id})
+
+    def _handle_ad_type_delete(self, type_id):
+        if not _safe_filename(type_id):
+            self._send(400, {"error": "invalid type_id"}); return
+        env = self._gh_env_or_503()
+        if not env: return
+        if self._degraded_or_503(): return
+        try:
+            ad_types.delete(env, type_id)
+        except FileNotFoundError:
+            self._send(404, {"error": "ad_type not found"}); return
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        self._send(200, {"deleted": type_id})
 
     # ── POST /generate ────────────────────────────────────────────────────────
     def _handle_generate(self):
@@ -466,7 +601,7 @@ class Handler(BaseHTTPRequestHandler):
         brand       = body.get("brand", "")
         ad_type     = body.get("ad_type", "")
         versions    = body.get("versions", 1)
-        style_label = body.get("style_label", "")
+        style_label = body.get("style_label", "")   # 現為 style_id
         style_free  = body.get("style_free", "")
         if ad_type not in AD_TYPES:
             self._send(400, {"error": "ad_type must be one of: ig, fb, seo"}); return
@@ -475,16 +610,36 @@ class Handler(BaseHTTPRequestHandler):
         if not _safe_brand_name(brand):
             self._send(400, {"error": "invalid brand name"}); return
         try:
-            brand_text, _ = _gh_get(env, GH_BRAND_PREFIX + "brand-%s.md" % brand)
+            brand_data = brands.get(env, brand)
         except FileNotFoundError:
-            self._send(404, {"error": "brand not found"}); return
+            # Master Spec §3.5:brand不存在時/generate直接回400,不靜默用空字串繼續
+            self._send(400, {"error": "brand not found"}); return
+        except ValueError as e:
+            self._send(500, {"error": str(e)}); return
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        brand_readable = (
+            "品牌名稱:%s\n定位:%s\n目標客群:%s\n賣點:%s\n"
+            % (brand_data.get("name", ""), brand_data.get("positioning", ""),
+               brand_data.get("target_audience", ""),
+               "、".join(brand_data.get("selling_points", [])) or "(待填)")
+        )
+        for note in brand_data.get("legacy_notes", []):
+            brand_readable += "%s:%s\n" % (note.get("label", ""), note.get("content", ""))
         style_block = ""
         if style_label:
-            styles = _load_styles(env)
-            example = styles.get(style_label, "")
-            style_block = "\n\n## 文風指定\n文風標籤:%s" % style_label
-            if example:
-                style_block += "\n參考範例(僅供文風參考,禁止複製內容):\n%s" % example
+            try:
+                style_data = styles.get(env, style_label)
+                style_name = style_data.get("name", style_label)
+                style_desc = style_data.get("description", "")
+                sample     = style_data.get("sample_copy", "")
+                style_block = "\n\n## 文風指定\n文風標籤:%s" % style_name
+                if style_desc and style_desc != "(待填)":
+                    style_block += "\n風格說明:%s" % style_desc
+                if sample:
+                    style_block += "\n參考範例(僅供文風參考,禁止複製內容):\n%s" % sample
+            except (FileNotFoundError, ValueError, RuntimeError):
+                pass  # 文風不存在/讀取失敗時靜默略過,不阻斷生成
         if style_free:
             style_block += "\n\n## 補充文風描述\n%s" % style_free
         system_text = _read_local(os.path.join(PROMPT_DIR, "system_base.md"))
@@ -492,7 +647,7 @@ class Handler(BaseHTTPRequestHandler):
         user_text = (
             type_text + style_block
             + "\n\n---\n\n## 品牌資料(僅可使用以下內容,禁止補充未載明事實)\n\n"
-            + brand_text
+            + brand_readable
             + "\n\n---\n\n請產出 %d 個版本,版本之間僅以獨立一行「%s」分隔,不加編號標題,不加任何前後說明。"
             % (versions, VERSION_DELIM)
         )
@@ -558,7 +713,6 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, {"error": "invalid filename"}); return
         if perf_tag not in VALID_PERF_TAGS:
             self._send(400, {"error": "performance_tag must be one of: high, low, 未標記"}); return
-        # 搜尋 archive 下各年份
         year = filename[:4] if len(filename) >= 4 else ""
         gh_path = GH_ARCHIVE_PREFIX + year + "/" + filename if year.isdigit() else None
         if not gh_path:
@@ -571,7 +725,6 @@ class Handler(BaseHTTPRequestHandler):
                           "performance_tag: " + perf_tag, text, count=1)
         _gh_put(env, gh_path, new_text,
                 "tag: %s → %s [auto-backup]" % (filename, perf_tag), sha)
-        # 累加 tag_frequency
         try:
             freq_text, freq_sha = _gh_get(env, GH_TAG_FREQ_PATH)
             freq = json.loads(freq_text)
@@ -590,8 +743,8 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8765"))
-    print("server.py v3 GitHub-first listening on http://localhost:%d" % port)
-    print("GET  /brands /brand/<n> /prompts /prompt/<f> /styles /health")
-    print("POST /brands/create /prompts/save /styles/add /generate /archive /tag")
-    print("DEL  /brand/<n> /style/<label>")
+    print("server.py Phase1 listening on http://localhost:%d" % port)
+    print("GET  /brands /brand/<id> /prompts /prompt/<f> /styles /ad_types /ad_type/<id> /health")
+    print("POST /brands/create /prompts/save /styles/add /ad_types/create /generate /archive /tag")
+    print("DEL  /brand/<id> /style/<id> /ad_type/<id>")
     HTTPServer(("127.0.0.1", port), Handler).serve_forever()
