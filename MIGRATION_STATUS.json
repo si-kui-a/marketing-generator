@@ -5,6 +5,11 @@
         "status": "moved",
         "note": "git mv data/brand -> data/brand_deprecated",
         "timestamp": "2026-07-21T02:29:40"
+      },
+      {
+        "status": "verified",
+        "note": "GET /brands回傳三筆(唯美婚紗/範例品牌B/範例品牌C)，GET /brand/唯美婚紗欄位完整(brand_id/positioning/legacy_notes皆存在)",
+        "timestamp": "2026-07-21T02:38:02"
       }
     ]
   }
