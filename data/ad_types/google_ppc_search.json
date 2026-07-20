@@ -1,0 +1,22 @@
+{
+  "platform": "Google Search Network",
+  "characteristics": "文字為主，出現於使用者主動搜尋結果，需直接對應搜尋意圖關鍵字，相關性要求高。",
+  "length_guide": "標題最多15則，每則30字元內；描述最多4則，每則90字元內；網址路徑2組，每組15字元內",
+  "cta_style": "直接對應搜尋意圖，如「立即查詢價格」「線上預約」",
+  "sample_structure": [
+    "關鍵字對應標題",
+    "賣點/差異化描述",
+    "明確CTA"
+  ],
+  "tags": [
+    "platform:Google",
+    "campaign_type:PPC",
+    "format:search"
+  ],
+  "status": "active",
+  "_raw_paste_pending_review": "",
+  "type_id": "google_ppc_search",
+  "name": "Google PPC-搜尋廣告",
+  "version": 1,
+  "last_updated": "2026-07-21"
+}
