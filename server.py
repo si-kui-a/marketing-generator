@@ -1,6 +1,7 @@
 # server.py — 唯一對外溝通節點。零第三方依賴,僅 Python 標準庫。
 # Phase1:local_kit.Collection 統一管理 brands/styles/ad_types,GitHub Contents API 為唯一正本。
 import base64
+import difflib
 import importlib
 import json
 import os
@@ -249,6 +250,29 @@ def _make_style_id(env, label):
         n += 1
 
 
+# ── Diff 邏輯(Master Spec §4.4,讀取時即時計算,不持久化)──────────────────────
+def literal_diff(original, revised):
+    """純規則式字元比對,非語意理解。UI呈現時需誠實標註此為文字比對演算法結果。"""
+    sm = difflib.SequenceMatcher(None, original, revised)
+    return [
+        {"type": tag, "original": original[i1:i2], "revised": revised[j1:j2]}
+        for tag, i1, i2, j1, j2 in sm.get_opcodes()
+    ]
+
+
+def block_diff(original, revised):
+    """方案B:段落層級diff。用語一律「第N區塊」,不對應sample_structure具名步驟。"""
+    def split_blocks(text):
+        return [b.strip() for b in re.split(r'(?<=[。！？\n])', text) if b.strip()]
+    orig_blocks, rev_blocks = split_blocks(original), split_blocks(revised)
+    sm = difflib.SequenceMatcher(None, orig_blocks, rev_blocks)
+    return [
+        {"type": tag, "block_index": i1,
+         "original_block": orig_blocks[i1:i2], "revised_block": rev_blocks[j1:j2]}
+        for tag, i1, i2, j1, j2 in sm.get_opcodes()
+    ]
+
+
 # ── 啟動時判定一次降級狀態(Master Spec §2.2)──────────────────────────────────
 # 刻意只在 import/啟動時算一次,不逐請求重算:若逐請求重算,長時間運行的
 # process 會在別的流程(如另一個終端機執行遷移)悄悄把migration狀態改成
@@ -331,6 +355,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._handle_ad_types()
             elif path.startswith("/ad_type/"):
                 self._handle_ad_type(path[len("/ad_type/"):])
+            elif path == "/revisions":
+                self._handle_revisions()
+            elif path.startswith("/revision/"):
+                self._handle_revision_get(path[len("/revision/"):])
             elif path == "/health":
                 env = _load_env()
                 self._send(200, {"github": _gh_check(env)})
@@ -358,6 +386,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._handle_style_add()
             elif path == "/ad_types/create":
                 self._handle_ad_type_create()
+            elif path == "/revisions/create":
+                self._handle_revision_create()
             else:
                 self._send(404, {"error": "not found"})
         except Exception as e:
@@ -374,6 +404,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._handle_style_delete(path[len("/style/"):])
             elif path.startswith("/ad_type/"):
                 self._handle_ad_type_delete(path[len("/ad_type/"):])
+            elif path.startswith("/revision/"):
+                self._handle_revision_delete(path[len("/revision/"):])
             else:
                 self._send(404, {"error": "not found"})
         except Exception as e:
@@ -609,6 +641,97 @@ class Handler(BaseHTTPRequestHandler):
         except RuntimeError as e:
             self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
         self._send(200, {"deleted": type_id})
+
+    # ── 修正案例:GET /revisions /revision/<id>,POST /revisions/create,
+    #             DELETE /revision/<id>(Master Spec §4,不提供 update()) ────────
+    def _handle_revisions(self):
+        env = self._gh_env_or_503()
+        if not env: return
+        try:
+            ids = revisions.list(env)
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        self._send(200, {"revisions": ids})
+
+    def _handle_revision_get(self, case_id):
+        """含跨collection懸空參照軟性檢查(矛盾修正#3)。"""
+        if not _safe_filename(case_id):
+            self._send(400, {"error": "invalid case_id"}); return
+        env = self._gh_env_or_503()
+        if not env: return
+        try:
+            data = revisions.get(env, case_id)
+        except FileNotFoundError:
+            self._send(404, {"error": "revision not found"}); return
+        except ValueError as e:
+            self._send(500, {"error": str(e)}); return
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        ad_type_id = data.get("ad_type_id", "")
+        if ad_type_id:
+            try:
+                ad_types.get(env, ad_type_id)
+                data["_ref_missing"] = False
+            except FileNotFoundError:
+                data["_ref_missing"] = True
+            except Exception:
+                pass  # GitHub連線問題不應影響主要資料回傳,略過此檢查
+        data["_diff_literal"] = literal_diff(data.get("original_text", ""), data.get("revised_text", ""))
+        data["_diff_block"] = block_diff(data.get("original_text", ""), data.get("revised_text", ""))
+        self._send(200, {"case_id": case_id, "data": data})
+
+    def _handle_revision_create(self):
+        body, err = self._read_body()
+        if err: self._send(400, {"error": err}); return
+        env = self._env_or_503()
+        if not env: return
+        if self._degraded_or_503(): return
+        original = body.get("original_text", "").strip()
+        revised = body.get("revised_text", "").strip()
+        if not original or not revised:
+            self._send(400, {"error": "original_text 與 revised_text 皆必填"}); return
+        if original == revised:
+            self._send(400, {"error": "原文與修改後文字相同,無需記錄"}); return
+        case_id = "rev_%s" % datetime.now().strftime("%Y%m%d_%H%M%S")
+        data = {
+            "brand_id": body.get("brand_id", ""),
+            "style_id": body.get("style_id", ""),
+            "ad_type_id": body.get("ad_type_id", ""),
+            "original_text": original,
+            "revised_text": revised,
+            "category_tags": body.get("category_tags", []) or [],
+            "tag_source": body.get("tag_source", "manual"),
+            "sentence_marks": body.get("sentence_marks", []) or [],
+            "internal_structure_markup": "",  # Phase7才使用
+        }
+        data["created_at"] = datetime.now().isoformat(timespec="seconds")
+        try:
+            obj = revisions.create(env, case_id, data)
+        except FileExistsError as e:
+            self._send(409, {"error": str(e)}); return
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        # §4.3 保留政策檢查(失敗不影響本次建立成功)
+        try:
+            _check_retention_policy(env)
+        except Exception as e:
+            _append_log("error.log", "retention_policy_failed: %s" % e)
+        self._send(200, {"created": case_id, "data": obj})
+
+    def _handle_revision_delete(self, case_id):
+        """不經過safe_git,走日常CRUD路徑(Master Spec §4.1/§2.3)。"""
+        if not _safe_filename(case_id):
+            self._send(400, {"error": "invalid case_id"}); return
+        env = self._gh_env_or_503()
+        if not env: return
+        if self._degraded_or_503(): return
+        try:
+            revisions.delete(env, case_id)
+        except FileNotFoundError:
+            self._send(404, {"error": "revision not found"}); return
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        self._send(200, {"deleted": case_id})
 
     # ── POST /generate ────────────────────────────────────────────────────────
     def _handle_generate(self):
