@@ -239,6 +239,16 @@ def _make_style_id(env, label):
         n += 1
 
 
+# ── 啟動時判定一次降級狀態(Master Spec §2.2)──────────────────────────────────
+# 刻意只在 import/啟動時算一次,不逐請求重算:若逐請求重算,長時間運行的
+# process 會在別的流程(如另一個終端機執行遷移)悄悄把migration狀態改成
+# moved後,對現有連線中的使用者「無預警開始擋寫入」;也會讓 Master Spec §3.4
+# 「Step1→2→3 連續執行完」的設計失效(Step2 本身就是在 moved 狀態下寫入)。
+# 未 verified 且未設 ALLOW_DEGRADED_START 時,讓 RuntimeError 直接往外拋、
+# 中止啟動(config_loader.load_config 的既有行為),不在此吞掉。
+_CONFIG = load_config(ROOT, allow_degraded_start=os.environ.get("ALLOW_DEGRADED_START") == "1")
+
+
 # ── Handler ───────────────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, payload):
@@ -283,15 +293,13 @@ class Handler(BaseHTTPRequestHandler):
         return env
 
     def _degraded_or_503(self):
-        """Master Spec §2.2:遷移未 verified 時,所有寫入操作回 503,不提供繞過。"""
-        try:
-            config = load_config(ROOT, allow_degraded_start=True)
-        except FileNotFoundError:
-            return False
-        if config.get("_degraded_mode"):
+        """Master Spec §2.2:降級狀態於啟動時判定一次(見 _CONFIG),非逐請求重算——
+        逐請求重算會讓「同一次連續執行完Step1→2→3」的設計目標(§3.4註解)變得不可能,
+        因為Step2本身就是在data/brand仍為moved狀態下對Collection.create()寫入。"""
+        if _CONFIG.get("_degraded_mode"):
             self._send(503, {
                 "error": "系統處於降級模式(遷移未驗證完成),寫入操作暫停:%s"
-                         % config.get("_degraded_reason")
+                         % _CONFIG.get("_degraded_reason")
             })
             return True
         return False
