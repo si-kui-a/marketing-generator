@@ -29,6 +29,11 @@
         "status": "verified",
         "note": "GET /styles回傳三筆(warm_story/urgent_promo/luxury_refined)，name/description欄位正確",
         "timestamp": "2026-07-21T02:42:54"
+      },
+      {
+        "status": "purged",
+        "note": "",
+        "timestamp": "2026-07-21T02:43:31"
       }
     ]
   }
