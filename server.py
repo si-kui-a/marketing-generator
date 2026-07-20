@@ -21,12 +21,12 @@ if hasattr(sys.stdout, "reconfigure"):
 
 ROOT       = os.path.dirname(os.path.abspath(__file__))
 PROMPT_DIR = os.path.join(ROOT, "prompts")   # 模板仍保留本機(供離線編輯參考)
-WORK_DIR   = os.path.join(ROOT, "work")
 CHANGELOG  = os.path.join(ROOT, "rules_changelog.md")
 
 sys.path.insert(0, os.path.join(ROOT, "local_kit"))
 from json_collection import Collection   # noqa: E402
 from config_loader import load_config    # noqa: E402
+from logger import log as kit_log        # noqa: E402
 
 AD_TYPES         = {"ig": "wedding_ig.md", "fb": "wedding_fb.md", "seo": "wedding_seo.md"}
 VALID_PERF_TAGS  = {"high", "low", "未標記"}
@@ -64,10 +64,10 @@ AD_TYPE_DEFAULTS = {
 
 
 # ── 工具 ──────────────────────────────────────────────────────────────────────
-def _append_log(filename, line):
-    os.makedirs(WORK_DIR, exist_ok=True)
-    with open(os.path.join(WORK_DIR, filename), "a", encoding="utf-8") as f:
-        f.write(line + "\n")
+def _append_log(filename, line, source="UI"):
+    # Master Spec §2.8:logs/ 取代 work/,格式含來源前綴。Phase1 全部呼叫點皆屬 UI
+    # 來源(尚無對外 API),source="API" 留待 Phase5 對外 API 開放時才會被實際傳入。
+    kit_log(ROOT, filename, line, source)
 
 
 def _load_env():
@@ -667,7 +667,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             _append_log("error.log", "%s | /generate | provider_error | %s" % (
                 self.log_date_time_string(), repr(e)))
-            self._send(502, {"error": "供應商呼叫失敗,詳見 work/error.log"}); return
+            self._send(502, {"error": "供應商呼叫失敗,詳見 logs/error.log"}); return
         text  = result.get("text", "")
         parts = [p.strip() for p in text.split(VERSION_DELIM) if p.strip()]
         payload = {"versions": parts}
