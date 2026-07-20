@@ -17,5 +17,14 @@
         "timestamp": "2026-07-21T02:39:18"
       }
     ]
+  },
+  "config/styles.json": {
+    "history": [
+      {
+        "status": "moved",
+        "note": "git mv config/styles.json -> config/styles.json_deprecated",
+        "timestamp": "2026-07-21T02:41:59"
+      }
+    ]
   }
 }
