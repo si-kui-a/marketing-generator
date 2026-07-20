@@ -1,0 +1,22 @@
+{
+  "platform": "Google Performance Max",
+  "characteristics": "目標為蒐集諮詢名單（表單提交/來電），文案需降低填表門檻感，強調免費諮詢/專業信任。",
+  "length_guide": "同PMax標準規格：標題3-15則30字元內，長標題1-5則90字元內，描述2-5則90字元內",
+  "cta_style": "諮詢導向，如「免費諮詢」「立即預約諮詢」，降低承諾感門檻",
+  "sample_structure": [
+    "痛點/疑問角度標題群",
+    "專業信任長標題",
+    "降低門檻話術描述"
+  ],
+  "tags": [
+    "platform:Google",
+    "campaign_type:PMax",
+    "objective:名單開發型"
+  ],
+  "status": "active",
+  "_raw_paste_pending_review": "",
+  "type_id": "google_pmax_leads",
+  "name": "Google PMax-名單開發型",
+  "version": 1,
+  "last_updated": "2026-07-21"
+}
