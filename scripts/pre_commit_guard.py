@@ -5,12 +5,20 @@ import subprocess
 import sys
 import os
 
+# Windows 主控台預設編碼(如 cp950)無法輸出中文/emoji,強制 stdout/stderr 走 UTF-8。
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "local_kit"))
 
 
 def main():
+    # encoding 必須明確指定 utf-8:git 輸出含中文檔名時,text=True 若不指定 encoding
+    # 會在背景 reader thread 拋出 UnicodeDecodeError,導致 stdout 靜默變 None,
+    # hook 因此以未捕捉例外崩潰、非零結束碼阻擋commit(見專案事故記錄)。
     repo_root = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
+        ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, encoding="utf-8"
     ).stdout.strip()
     tracker_file = os.path.join(repo_root, "MIGRATION_STATUS.json")
     if not os.path.isfile(tracker_file):
@@ -21,7 +29,7 @@ def main():
 
     result = subprocess.run(
         ["git", "diff", "--cached", "--name-status"],
-        cwd=repo_root, capture_output=True, text=True
+        cwd=repo_root, capture_output=True, text=True, encoding="utf-8"
     )
     deleted_files = [
         line.split("\t", 1)[1] for line in result.stdout.strip().splitlines()

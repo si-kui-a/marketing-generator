@@ -8,7 +8,10 @@ from migration_tracker import MigrationTracker
 
 
 def _run(args, cwd, check=True):
-    r = subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+    # encoding 必須明確指定 utf-8:Windows 主控台預設編碼(如 cp950)無法解碼
+    # git 輸出的中文檔名,text=True 若不指定 encoding 會在背景 reader thread
+    # 拋出 UnicodeDecodeError,導致 stdout 靜默變成 None(見專案事故記錄)。
+    r = subprocess.run(args, cwd=cwd, capture_output=True, text=True, encoding="utf-8")
     if check and r.returncode != 0:
         raise RuntimeError("指令失敗 %s：%s" % (args, r.stderr.strip()))
     return r
