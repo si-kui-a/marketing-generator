@@ -471,6 +471,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._handle_revision_stats_recompute()
             elif path.startswith("/revision/"):
                 self._handle_revision_get(path[len("/revision/"):])
+            elif path.startswith("/performance/"):
+                self._handle_performance_get(path[len("/performance/"):])
             elif path == "/health":
                 env = _load_env()
                 self._send(200, {"github": _gh_check(env)})
@@ -500,6 +502,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._handle_ad_type_create()
             elif path == "/revisions/create":
                 self._handle_revision_create()
+            elif path == "/performance/create":
+                self._handle_performance_create()
             else:
                 self._send(404, {"error": "not found"})
         except Exception as e:
@@ -896,6 +900,77 @@ class Handler(BaseHTTPRequestHandler):
                 "revision_stats: full recompute [manual]", sha)
         self._send(200, {"recomputed": summary})
 
+    # ── 成效登記:POST /performance/create,GET /performance/<brand>(§6,不提供DELETE)──
+    def _handle_performance_create(self):
+        body, err = self._read_body()
+        if err: self._send(400, {"error": err}); return
+        env = self._env_or_503()
+        if not env: return
+        brand_id = body.get("brand_id", "").strip()
+        if not _safe_brand_name(brand_id):
+            self._send(400, {"error": "invalid brand_id"}); return
+        required = ["spend", "impressions", "clicks", "conversions"]
+        for field in required:
+            if field not in body:
+                self._send(400, {"error": "缺少必填欄位:%s" % field}); return
+            if not isinstance(body[field], (int, float)) or body[field] < 0:
+                self._send(400, {"error": "%s 必須為非負數字" % field}); return
+        copy_id = "%s_%s" % (brand_id, datetime.now().strftime("%Y%m%d_%H%M%S"))
+        data = {
+            "ad_type": body.get("ad_type", ""),
+            "revision_case_id": body.get("revision_case_id", ""),
+            "date_range": body.get("date_range", {"start": "", "end": ""}),
+            "spend": body["spend"], "impressions": body["impressions"],
+            "clicks": body["clicks"], "conversions": body["conversions"],
+            "custom_metrics": body.get("custom_metrics", {}) or {},
+            "notes": body.get("notes", ""),
+        }
+        try:
+            obj = _performance_create(env, brand_id, copy_id, data)
+        except FileExistsError as e:
+            self._send(409, {"error": str(e)}); return
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        self._send(200, {"created": copy_id, "data": obj})
+
+    def _handle_performance_get(self, brand_id):
+        """含跨collection懸空參照軟性檢查(矛盾修正#3統一處理方式)。"""
+        if not _safe_brand_name(brand_id):
+            self._send(400, {"error": "invalid brand_id"}); return
+        env = self._gh_env_or_503()
+        if not env: return
+        try:
+            copy_ids = _performance_list(env, brand_id)
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        records = []
+        for cid in copy_ids:
+            try:
+                content, _ = _gh_get(env, _performance_path(brand_id, cid))
+                rec = json.loads(content)
+            except (FileNotFoundError, ValueError):
+                continue
+            ad_type = rec.get("ad_type", "")
+            if ad_type:
+                try:
+                    ad_types.get(env, ad_type)
+                    rec["_ad_type_ref_missing"] = False
+                except FileNotFoundError:
+                    rec["_ad_type_ref_missing"] = True
+                except Exception:
+                    pass
+            rev_id = rec.get("revision_case_id", "")
+            if rev_id:
+                try:
+                    revisions.get(env, rev_id)
+                    rec["_revision_ref_missing"] = False
+                except FileNotFoundError:
+                    rec["_revision_ref_missing"] = True
+                except Exception:
+                    pass
+            records.append(rec)
+        self._send(200, {"brand_id": brand_id, "records": records})
+
     # ── POST /generate ────────────────────────────────────────────────────────
     def _handle_generate(self):
         body, err = self._read_body()
@@ -1049,6 +1124,8 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8765"))
     print("server.py Phase1 listening on http://localhost:%d" % port)
     print("GET  /brands /brand/<id> /prompts /prompt/<f> /styles /ad_types /ad_type/<id> /health")
+    print("     /revisions /revision/<id> /revision_stats /revision_stats/recompute /performance/<brand>")
     print("POST /brands/create /prompts/save /styles/add /ad_types/create /generate /archive /tag")
-    print("DEL  /brand/<id> /style/<id> /ad_type/<id>")
+    print("     /revisions/create /performance/create")
+    print("DEL  /brand/<id> /style/<id> /ad_type/<id> /revision/<id>")
     HTTPServer(("127.0.0.1", port), Handler).serve_forever()
