@@ -283,6 +283,43 @@ def block_diff(original, revised):
 _CONFIG = load_config(ROOT, allow_degraded_start=os.environ.get("ALLOW_DEGRADED_START") == "1")
 
 
+# ── 修正案例保留政策(Master Spec §4.3)────────────────────────────────────────
+def _check_retention_policy(env):
+    """
+    觸發於 POST /revisions/create 成功後。超過上限的最舊案例移至 _archive/。
+    矛盾修正#4:此函式不觸發任何 tag_frequency 統計異動(Phase3範圍,封存≠刪除)。
+    """
+    max_count = _CONFIG.get("revision_retention", {}).get("max_count", 20)
+    max_months = _CONFIG.get("revision_retention", {}).get("max_months", 3)
+    ids = revisions.list(env)
+    # 依timestamp排序(case_id本身即timestamp格式,字串排序即時間排序)
+    ids_sorted = sorted(ids)
+    now = datetime.now()
+    to_archive = []
+    if len(ids_sorted) > max_count:
+        to_archive.extend(ids_sorted[:len(ids_sorted) - max_count])
+    for cid in ids_sorted:
+        if cid in to_archive:
+            continue
+        try:
+            ts_str = cid.replace("rev_", "")
+            ts = datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
+            if (now - ts).days > max_months * 30:
+                to_archive.append(cid)
+        except ValueError:
+            continue
+    for cid in to_archive:
+        try:
+            content, sha = _gh_get(env, "data/revisions/%s.json" % cid)
+            _gh_put(env, "data/revisions/_archive/%s.json" % cid, content,
+                    "revision: archive %s [retention-policy]" % cid)
+            _gh_delete(env, "data/revisions/%s.json" % cid,
+                       "revision: remove archived %s from active [retention-policy]" % cid, sha)
+        except Exception as e:
+            _append_log("error.log", "archive_failed %s: %s" % (cid, e))
+            continue  # 單筆失敗不影響其他筆
+
+
 # ── Handler ───────────────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, payload):
