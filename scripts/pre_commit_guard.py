@@ -35,15 +35,21 @@ def main():
         line.split("\t", 1)[1] for line in result.stdout.strip().splitlines()
         if line.startswith("D\t")
     ]
+    # "purged" 也視為已授權:safe_git.purge_deprecated() 自身已在動作前檢查
+    # current == "verified" 才允許執行(見 safe_git.py),且會在呼叫 git commit
+    # 之前就把 tracker 狀態寫成 "purged"——若此處仍要求 "verified" 才放行,
+    # 會變成 purge_deprecated() 自己產生的、本該合法的 commit 反被此 hook 擋下
+    # (雞生蛋蛋生雞:committing的當下磁碟上狀態已經是purged,而非verified)。
+    ALLOWED_STATUSES = ("verified", "purged")
     for f in deleted_files:
         # 反查所屬path（去除_deprecated後綴與檔名部分，抓目錄層級）
         for candidate in tracker._load().keys():
             if f.startswith(candidate + "_deprecated") or f.startswith(candidate):
                 status = tracker.get_status(candidate)
-                if status != "verified":
+                if status not in ALLOWED_STATUSES:
                     print(
                         "❌ 阻擋commit：偵測到刪除 %s，但 migration_tracker 中狀態為 %s"
-                        "（需為 verified）。請先執行 mark_verified() 並提供具體驗證說明，"
+                        "（需為 verified 或 purged）。請先執行 mark_verified() 並提供具體驗證說明，"
                         "或此操作不應包含在本次commit中。" % (f, status)
                     )
                     sys.exit(1)
