@@ -1,8 +1,6 @@
 {
-  "category_tag_counts": {
-    "測試標籤": 1
-  },
-  "total_cases": 1,
-  "last_updated": "2026-07-21T04:36:50",
+  "category_tag_counts": {},
+  "total_cases": 0,
+  "last_updated": "2026-07-21T04:37:13",
   "last_recomputed_from_scratch": ""
 }
