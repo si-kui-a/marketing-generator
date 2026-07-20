@@ -17,3 +17,4 @@
 2026-07-18 | prompts | wedding_ig.md | 驗收測試已還原原始內容(修正結尾換行) | 觸發原因:UI 編輯器存檔
 2026-07-18 | 系統 | spec.md v2.1 | 修正 GitHub 架構描述:本機 data/ 非獨立資料,為同一 repo 的安全網,§E 移除操作永久停用 | 觸發原因:§E 執行導致 GitHub 真實資料誤刪事故,已 revert
 2026-07-21 | 系統 | spec.md v3 + server.py + index.html | 目錄結構重建、品牌/文風格式遷移為JSON、新增廣告類型管理模組(Phase1) | 觸發原因:v3規格書導入,DA Trainer整合準備
+2026-07-21 | 系統 | server.py + index.html | 新增修正案例庫(Phase2):diff引擎、保留政策、/generate結果頁儲存功能 | 觸發原因:Master Spec v3.0 Phase2實作
