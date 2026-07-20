@@ -1,0 +1,11 @@
+# 可調參數，無機密內容，進版控
+revision_retention:
+  max_count: 20
+  max_months: 3
+ai_confirmation_streak_warning: 10
+api_timeout_seconds: 10
+revision_category_presets:
+  - "語氣過重"
+  - "資訊錯誤"
+  - "結構不佳"
+  - "CTA不明確"
