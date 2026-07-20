@@ -319,16 +319,48 @@ async function generate() {
     if (!r.ok) { $("warnbox").textContent = "錯誤:" + (d.error || r.status); return; }
     if (d.warning) $("warnbox").textContent = d.warning;
     d.versions.forEach((v, i) => {
-      const card = document.createElement("div"); card.className = "card";
-      const head = document.createElement("header"); head.textContent = "版本 " + (i + 1);
-      const btn = document.createElement("button"); btn.className = "ghost"; btn.textContent = "複製";
-      btn.onclick = () => navigator.clipboard.writeText(v).then(() => btn.textContent = "已複製");
-      head.appendChild(btn); card.appendChild(head);
-      card.appendChild(document.createTextNode(v));
-      $("results").appendChild(card);
+      $("results").appendChild(renderVersionCard(v, i));
     });
   } catch { $("warnbox").textContent = "連線失敗"; }
   finally { $("go").disabled = false; $("go").textContent = "生成"; }
+}
+// ── 修正案例(Master Spec §4):/generate 結果頁可編輯textarea + 儲存 ───────────
+function renderVersionCard(originalText, index) {
+  const card = document.createElement("div"); card.className = "card";
+  const head = document.createElement("header");
+  head.textContent = "版本 " + (index + 1);
+  card.appendChild(head);
+  const textarea = document.createElement("textarea");
+  textarea.value = originalText;
+  textarea.style.minHeight = "150px"; textarea.style.width = "100%";
+  card.appendChild(textarea);
+  const btnRow = document.createElement("div");
+  btnRow.style.marginTop = ".5rem"; btnRow.style.display = "flex"; btnRow.style.gap = ".5rem";
+  const copyBtn = document.createElement("button"); copyBtn.className = "ghost"; copyBtn.textContent = "複製";
+  copyBtn.onclick = () => navigator.clipboard.writeText(textarea.value).then(() => copyBtn.textContent = "已複製");
+  const saveBtn = document.createElement("button"); saveBtn.className = "primary"; saveBtn.textContent = "儲存修正案例";
+  saveBtn.disabled = true;  // 原文未變動時disable,矛盾修正對應§4.6例外處理
+  textarea.addEventListener("input", () => {
+    saveBtn.disabled = (textarea.value.trim() === originalText.trim());
+  });
+  saveBtn.onclick = () => saveRevision(originalText, textarea.value, saveBtn);
+  btnRow.appendChild(copyBtn); btnRow.appendChild(saveBtn);
+  card.appendChild(btnRow);
+  return card;
+}
+async function saveRevision(original, revised, btn) {
+  btn.disabled = true; btn.textContent = "儲存中…";
+  const r = await fetch(API + "/revisions/create", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      brand_id: $("brand").value, style_id: $("styleSelect").value, ad_type_id: "",
+      original_text: original, revised_text: revised,
+      category_tags: [], tag_source: "manual", sentence_marks: []
+    })
+  });
+  const d = await r.json();
+  if (!r.ok) { btn.textContent = "失敗:" + d.error; btn.disabled = false; return; }
+  btn.textContent = "✓ 已記錄";
 }
 function addExtraField() {
   const wrap = document.createElement("div"); wrap.className = "extra-field";
