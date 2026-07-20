@@ -74,6 +74,7 @@ footer { margin-top: 2rem; font-size: .8rem; color: #888; text-align: center; pa
     <button onclick="switchTab('prompts',this)">模板編輯</button>
     <button onclick="switchTab('styles',this)">文風管理</button>
     <button onclick="switchTab('adtypes',this)">廣告類型</button>
+    <button onclick="switchTab('stats',this)">案例統計</button>
   </nav>
   <div id="status" class="bad">連線中…</div>
   <div id="ghStatus" class="warn-badge">GitHub…</div>
@@ -223,6 +224,15 @@ footer { margin-top: 2rem; font-size: .8rem; color: #888; text-align: center; pa
     <div id="adTypeList">載入中…</div>
   </fieldset>
 </div>
+<!-- ── 案例統計 ── -->
+<div id="tab-stats" class="tab">
+  <fieldset>
+    <legend>問題標籤統計</legend>
+    <div id="statsList">載入中…</div>
+    <p><button class="ghost" onclick="recomputeStats()">手動重新計算</button>
+       <span id="statsMsg" style="margin-left:.8rem;font-size:.85rem;color:#888"></span></p>
+  </fieldset>
+</div>
 </main>
 <footer>本工具之標籤建議功能為「關鍵字比對輔助標記」(頻率統計),非語意理解。生成結果須經人工檢視後才可使用。</footer>
 <script>
@@ -242,6 +252,7 @@ function switchTab(name, btn) {
   if (name === "brands") loadBrandList();
   if (name === "styles") loadStyleList();
   if (name === "adtypes") loadAdTypeList();
+  if (name === "stats") loadStats();
 }
 // ── 按住3秒二次確認刪除(Master Spec §3.6,取代點兩次)────────────────────────
 function bindHoldToDelete(btn, onConfirm) {
@@ -538,6 +549,23 @@ async function loadAdTypeList() {
       } catch {}
     }
   } catch { $("adTypeList").textContent = "載入失敗,請確認 server 已啟動"; }
+}
+// ── 案例統計(Master Spec §5)──────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const d = await (await fetch(API + "/revision_stats")).json();
+    const el = $("statsList");
+    const entries = Object.entries(d.category_tag_counts || {}).sort((a,b) => b[1]-a[1]);
+    if (!entries.length) { el.textContent = "尚無資料"; return; }
+    el.innerHTML = "<p>共 " + d.total_cases + " 筆案例</p>" +
+      entries.map(([tag, n]) => "<div>" + tag + "(" + n + "次)</div>").join("");
+  } catch { $("statsList").textContent = "載入失敗,請確認 server 已啟動"; }
+}
+async function recomputeStats() {
+  $("statsMsg").textContent = "重算中…";
+  const d = await (await fetch(API + "/revision_stats/recompute")).json();
+  $("statsMsg").textContent = "✓ 已重算,共 " + d.recomputed.total_cases + " 筆";
+  loadStats();
 }
 init();
 </script>
