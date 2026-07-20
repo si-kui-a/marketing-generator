@@ -1,4 +1,7 @@
 .env
-work/*.log
 data/_local_backup/
 __pycache__/
+your-extensions/
+logs/*.log
+data/brand_deprecated/
+config/styles.json_deprecated
