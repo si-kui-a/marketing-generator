@@ -1,0 +1,21 @@
+{
+  "platform": "Google Shopping",
+  "characteristics": "廣告內容（標題/描述/價格/圖片）主要來自商品Feed資料，非手寫文案主導，優化重點在Feed欄位品質而非傳統文案技巧。",
+  "length_guide": "依Feed規格（商品標題建議150字元內，需含品牌/型號/關鍵屬性）",
+  "cta_style": "N/A（系統制式呈現價格與商品資訊，無自訂CTA文字欄位）",
+  "sample_structure": [
+    "Feed標題：品牌+商品名+關鍵屬性",
+    "Feed描述：規格/賣點條列"
+  ],
+  "tags": [
+    "platform:Google",
+    "campaign_type:PPC",
+    "format:shopping"
+  ],
+  "status": "active",
+  "_raw_paste_pending_review": "",
+  "type_id": "google_ppc_shopping",
+  "name": "Google PPC-購物廣告",
+  "version": 1,
+  "last_updated": "2026-07-21"
+}
