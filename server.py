@@ -35,11 +35,12 @@ MAX_VERSIONS     = 5
 PROMPT_WHITELIST = set(AD_TYPES.values()) | {"system_base.md"}
 
 # GitHub Contents API paths
-GH_BRAND_PREFIX   = "data/brands/"
-GH_STYLE_PREFIX   = "data/styles/"
-GH_AD_TYPE_PREFIX = "data/ad_types/"
-GH_ARCHIVE_PREFIX = "data/archive/"
-GH_TAG_FREQ_PATH  = "data/tag_frequency.json"
+GH_BRAND_PREFIX    = "data/brands/"
+GH_STYLE_PREFIX    = "data/styles/"
+GH_AD_TYPE_PREFIX  = "data/ad_types/"
+GH_REVISION_PREFIX = "data/revisions/"
+GH_ARCHIVE_PREFIX  = "data/archive/"
+GH_TAG_FREQ_PATH   = "data/tag_frequency.json"
 
 # 已知中文標籤 → 固定 slug 對照表(Master Spec §3.2 第一層)。
 # 注意:本專案 spec §0 訂為「零依賴、純 Python 標準庫」,不可違反,故不引入 pypinyin
@@ -60,6 +61,14 @@ AD_TYPE_DEFAULTS = {
     "platform": "(待填)", "characteristics": "(待填)", "length_guide": "(待填)",
     "cta_style": "(待填)", "sample_structure": [], "tags": [], "status": "active",
     "_raw_paste_pending_review": "",
+}
+# Master Spec §4.1:修正案例 schema。不提供 update()——歷史紀錄一旦寫入不可竄改,
+# 見 json_collection.Collection 本身即無 update 方法,此為架構層級保證非僅約定。
+REVISION_DEFAULTS = {
+    "brand_id": "", "style_id": "", "ad_type_id": "",
+    "original_text": "", "revised_text": "",
+    "category_tags": [], "tag_source": "manual",
+    "sentence_marks": [], "internal_structure_markup": "",
 }
 
 
@@ -219,9 +228,10 @@ def _append_changelog_gh(env, line):
 
 
 # ── Collections ───────────────────────────────────────────────────────────────
-brands   = Collection(GH_BRAND_PREFIX, "brand_id", BRAND_DEFAULTS, _gh_get, _gh_put, _gh_delete, _gh_list)
-styles   = Collection(GH_STYLE_PREFIX, "style_id", STYLE_DEFAULTS, _gh_get, _gh_put, _gh_delete, _gh_list)
-ad_types = Collection(GH_AD_TYPE_PREFIX, "type_id", AD_TYPE_DEFAULTS, _gh_get, _gh_put, _gh_delete, _gh_list)
+brands    = Collection(GH_BRAND_PREFIX, "brand_id", BRAND_DEFAULTS, _gh_get, _gh_put, _gh_delete, _gh_list)
+styles    = Collection(GH_STYLE_PREFIX, "style_id", STYLE_DEFAULTS, _gh_get, _gh_put, _gh_delete, _gh_list)
+ad_types  = Collection(GH_AD_TYPE_PREFIX, "type_id", AD_TYPE_DEFAULTS, _gh_get, _gh_put, _gh_delete, _gh_list)
+revisions = Collection(GH_REVISION_PREFIX, "case_id", REVISION_DEFAULTS, _gh_get, _gh_put, _gh_delete, _gh_list)
 
 
 def _make_style_id(env, label):
