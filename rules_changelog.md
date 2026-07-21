@@ -19,3 +19,4 @@
 2026-07-21 | 系統 | spec.md v3 + server.py + index.html | 目錄結構重建、品牌/文風格式遷移為JSON、新增廣告類型管理模組(Phase1) | 觸發原因:v3規格書導入,DA Trainer整合準備
 2026-07-21 | 系統 | server.py + index.html | 新增修正案例庫(Phase2):diff引擎、保留政策、/generate結果頁儲存功能 | 觸發原因:Master Spec v3.0 Phase2實作
 2026-07-21 | 系統 | server.py + index.html | 新增標籤統計(Phase3):增量更新(create+1/delete-1)、手動重算、查詢端點;封存不觸發統計異動 | 觸發原因:Master Spec v3.0 Phase3實作
+2026-07-21 | 系統 | server.py + index.html | 新增成效登記(Phase4):/performance/create、/performance/<brand>查詢,含懸空參照軟性檢查 | 觸發原因:Master Spec v3.0 Phase4實作
