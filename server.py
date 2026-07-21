@@ -396,6 +396,64 @@ def _performance_create(env, brand_id, copy_id, data):
     return obj
 
 
+# ── Skill封裝(Master Spec §10.1)──────────────────────────────────────────────
+def regenerate_skill(env, type_id):
+    """讀取ad_types.get(type_id),組成SKILL.md內容並寫入本機skills/{type_id}/SKILL.md。
+    手動觸發,非自動監聽version異動(依§10.1明訂,比照Phase7「手動觸發」原則,
+    避免監聽邏輯本身成為新的複雜度來源)。純讀取既有ad_types資料轉為Markdown輸出,
+    不修改data/ad_types/任何內容。"""
+    try:
+        data = ad_types.get(env, type_id)
+    except FileNotFoundError:
+        raise FileNotFoundError("廣告類型 %s 不存在,無法產生Skill" % type_id)
+    skill_dir = os.path.join(ROOT, "skills", type_id)
+    os.makedirs(skill_dir, exist_ok=True)
+    sample_structure_md = "\n".join("- %s" % s for s in data.get("sample_structure", []))
+    tags_md = "、".join(data.get("tags", []))
+    content = """---
+name: ad-copy-{type_id}
+description: >
+  依「{name}」規格產生行銷文案的格式指引。適用場景見下方「適用平台」。
+  觸發時機:需要撰寫此廣告類型的文案時。
+---
+# {name}
+## 適用平台
+{platform}
+## 特性說明
+{characteristics}
+## 長度規範
+{length_guide}
+## CTA風格
+{cta_style}
+## 建議結構
+{sample_structure}
+## 標籤
+{tags}
+## 使用方式
+此Skill可離線於本地資料運作,不強制依賴server啟動。若已有結構化品牌資料
+(見`data/brands/{{brand_id}}.json`格式),可直接依上述規範產出文案,
+無需啟動`server.py`或呼叫AI供應商。
+## 版本
+本Skill依`data/ad_types/{type_id}.json`的version={version}欄位產生,
+若該筆廣告類型資料異動,需重新呼叫`regenerate_skill('{type_id}')`同步更新本檔。
+最後更新:{last_updated}
+""".format(
+        type_id=type_id,
+        name=data.get("name", "(待填)"),
+        platform=data.get("platform", "(待填)"),
+        characteristics=data.get("characteristics", "(待填)"),
+        length_guide=data.get("length_guide", "(待填)"),
+        cta_style=data.get("cta_style", "(待填)"),
+        sample_structure=sample_structure_md or "(無)",
+        tags=tags_md or "(無)",
+        version=data.get("version", 1),
+        last_updated=data.get("last_updated", ""),
+    )
+    with open(os.path.join(skill_dir, "SKILL.md"), "w", encoding="utf-8") as f:
+        f.write(content)
+    return os.path.join(skill_dir, "SKILL.md")
+
+
 # ── Handler ───────────────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, payload):
