@@ -533,6 +533,14 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"github": _gh_check(env), "status": "ok"})
         elif path.startswith("/performance/"):
             self._handle_performance_get(path[len("/performance/"):])
+        elif path == "/revisions":
+            self._handle_revisions()
+        elif path.startswith("/revision/"):
+            self._handle_revision_get(path[len("/revision/"):])
+        elif path == "/revision_stats":
+            self._handle_revision_stats()
+        elif path == "/revision_stats/recompute":
+            self._handle_revision_stats_recompute()
         else:
             self._send(404, {"error": "not found"})
 
