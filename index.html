@@ -355,9 +355,50 @@ function renderVersionCard(originalText, index) {
     saveBtn.disabled = (textarea.value.trim() === originalText.trim());
   });
   saveBtn.onclick = () => saveRevision(originalText, textarea.value, saveBtn);
-  btnRow.appendChild(copyBtn); btnRow.appendChild(saveBtn);
+  const perfBtn = document.createElement("button"); perfBtn.className = "ghost"; perfBtn.textContent = "登記成效";
+  perfBtn.onclick = () => openPerformanceForm($("brand").value);
+  btnRow.appendChild(copyBtn); btnRow.appendChild(saveBtn); btnRow.appendChild(perfBtn);
   card.appendChild(btnRow);
   return card;
+}
+// ── 成效登記(Master Spec §6):/generate 結果頁按鈕開啟登記表單 ─────────────────
+function openPerformanceForm(brandId) {
+  const modal = document.createElement("div");
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:999";
+  modal.innerHTML = `
+    <div style="background:#fff;padding:1.5rem;border-radius:8px;max-width:400px;width:90%">
+      <h3 style="margin-top:0">登記成效 — ${brandId}</h3>
+      <label>花費 *</label><input id="pfSpend" type="number" min="0" value="0">
+      <label>曝光 *</label><input id="pfImpressions" type="number" min="0" value="0">
+      <label>點擊 *</label><input id="pfClicks" type="number" min="0" value="0">
+      <label>轉換 *</label><input id="pfConversions" type="number" min="0" value="0">
+      <label>備註</label><textarea id="pfNotes"></textarea>
+      <p style="margin-top:1rem;display:flex;gap:.5rem;justify-content:flex-end">
+        <button class="ghost" id="pfCancel">取消</button>
+        <button class="primary" id="pfSubmit">送出</button>
+      </p>
+      <div id="pfMsg" style="font-size:.85rem;margin-top:.5rem"></div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector("#pfCancel").onclick = () => modal.remove();
+  modal.querySelector("#pfSubmit").onclick = async () => {
+    const body = {
+      brand_id: brandId,
+      spend: parseFloat($("pfSpend").value) || 0,
+      impressions: parseInt($("pfImpressions").value, 10) || 0,
+      clicks: parseInt($("pfClicks").value, 10) || 0,
+      conversions: parseInt($("pfConversions").value, 10) || 0,
+      notes: $("pfNotes").value.trim(),
+    };
+    const r = await fetch(API + "/performance/create", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (!r.ok) { modal.querySelector("#pfMsg").innerHTML = '<span class="warn">' + d.error + '</span>'; return; }
+    modal.querySelector("#pfMsg").innerHTML = '<span class="info">✓ 已登記</span>';
+    setTimeout(() => modal.remove(), 1000);
+  };
 }
 async function saveRevision(original, revised, btn) {
   btn.disabled = true; btn.textContent = "儲存中…";
