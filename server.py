@@ -107,6 +107,11 @@ def _safe_filename(name):
     return bool(name) and not re.search(r'[/\\:*?"<>|\x00]', name)
 
 
+def _is_external_api_path(path):
+    """判斷是否為對外API路徑(皆以/api/前綴,區分於既有內部端點,Master Spec §7)。"""
+    return path.startswith("/api/")
+
+
 # ── GitHub Contents API ───────────────────────────────────────────────────────
 def _gh_headers(token):
     return {
@@ -446,9 +451,50 @@ class Handler(BaseHTTPRequestHandler):
             return True
         return False
 
+    def _check_api_key(self):
+        """對外API(Master Spec §7)驗證。回傳True代表通過;失敗時已自行送出
+        403/503回應,呼叫端只需檢查回傳值後return,不需重複送出錯誤回應。"""
+        expected_key = _CONFIG.get("api_key", "")
+        if not expected_key:
+            self._send(503, {"error": "對外API未設定api_key,請在your-extensions/config.local.yaml填入"})
+            return False
+        provided = self.headers.get("X-API-Key", "")
+        if provided != expected_key:
+            self._send(403, {"error": "無效或缺少X-API-Key"})
+            return False
+        return True
+
+    def _dispatch_internal_get(self, path):
+        """對外API通過認證後,複用既有GET handler邏輯,避免重複實作(Master Spec §7)。"""
+        if path == "/brands":
+            self._handle_brands()
+        elif path.startswith("/brand/"):
+            self._handle_brand(path[len("/brand/"):])
+        elif path == "/health":
+            env = _load_env()
+            self._send(200, {"github": _gh_check(env), "status": "ok"})
+        elif path.startswith("/performance/"):
+            self._handle_performance_get(path[len("/performance/"):])
+        else:
+            self._send(404, {"error": "not found"})
+
+    def _dispatch_internal_post(self, path):
+        """對外API寫入類端點只開放/generate,不含品牌/廣告類型/案例的建立類CRUD
+        (Master Spec §7延續§4.8「不開放品牌新增/刪除」的既有限制)。"""
+        if path == "/generate":
+            self._handle_generate()
+        else:
+            self._send(404, {"error": "not found"})
+
     def do_GET(self):
         try:
             path = unquote(self.path)
+            if _is_external_api_path(path):
+                if not self._check_api_key():
+                    return
+                kit_log(ROOT, "activity.log", "API GET %s" % path, source="API")
+                self._dispatch_internal_get(path[len("/api"):])
+                return
             if path == "/brands":
                 self._handle_brands()
             elif path.startswith("/brand/"):
@@ -486,6 +532,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             path = unquote(self.path)
+            if _is_external_api_path(path):
+                if not self._check_api_key():
+                    return
+                kit_log(ROOT, "activity.log", "API POST %s" % path, source="API")
+                self._dispatch_internal_post(path[len("/api"):])
+                return
             if path == "/generate":
                 self._handle_generate()
             elif path == "/archive":
@@ -1128,4 +1180,5 @@ if __name__ == "__main__":
     print("POST /brands/create /prompts/save /styles/add /ad_types/create /generate /archive /tag")
     print("     /revisions/create /performance/create")
     print("DEL  /brand/<id> /style/<id> /ad_type/<id> /revision/<id>")
+    print("API  (X-API-Key) GET /api/brands /api/brand/<id> /api/performance/<brand> /api/health, POST /api/generate")
     HTTPServer(("127.0.0.1", port), Handler).serve_forever()
