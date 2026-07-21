@@ -1,0 +1,16 @@
+{
+  "ad_type": "__no_such_ad_type__",
+  "revision_case_id": "__no_such_rev__",
+  "date_range": {
+    "start": "",
+    "end": ""
+  },
+  "spend": 100.5,
+  "impressions": 2000,
+  "clicks": 50,
+  "conversions": 3,
+  "custom_metrics": {},
+  "notes": "test",
+  "copy_id": "__phase4_test_brand___20260721_095840",
+  "version": 1
+}
