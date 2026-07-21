@@ -1168,6 +1168,11 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, {"tagged": filename, "performance_tag": perf_tag})
 
     def log_message(self, fmt, *args):
+        """BaseHTTPRequestHandler內建的傳輸層日誌hook。對/api/路徑跳過寫入,
+        避免與_dispatch_internal_*中已明確標記source="API"的業務層日誌重複——
+        同一次外部呼叫不該產生兩行記錄。內部UI路徑維持原行為不變。"""
+        if self.path.startswith("/api/"):
+            return
         _append_log("activity.log", "%s | %s" % (
             self.log_date_time_string(), fmt % args))
 
