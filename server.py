@@ -614,6 +614,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._handle_revision_create()
             elif path == "/performance/create":
                 self._handle_performance_create()
+            elif path.startswith("/skills/regenerate/"):
+                self._handle_regenerate_skill(path[len("/skills/regenerate/"):])
             else:
                 self._send(404, {"error": "not found"})
         except Exception as e:
@@ -1080,6 +1082,17 @@ class Handler(BaseHTTPRequestHandler):
                     pass
             records.append(rec)
         self._send(200, {"brand_id": brand_id, "records": records})
+
+    # ── Skill封裝:POST /skills/regenerate/<type_id>(Master Spec §10.1) ───────
+    def _handle_regenerate_skill(self, type_id):
+        if not _safe_filename(type_id):
+            self._send(400, {"error": "invalid type_id"}); return
+        env = _load_env()
+        try:
+            path = regenerate_skill(env, type_id)
+        except FileNotFoundError as e:
+            self._send(404, {"error": str(e)}); return
+        self._send(200, {"regenerated": type_id, "path": path})
 
     # ── POST /generate ────────────────────────────────────────────────────────
     def _handle_generate(self):
