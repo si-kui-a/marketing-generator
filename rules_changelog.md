@@ -20,3 +20,4 @@
 2026-07-21 | 系統 | server.py + index.html | 新增修正案例庫(Phase2):diff引擎、保留政策、/generate結果頁儲存功能 | 觸發原因:Master Spec v3.0 Phase2實作
 2026-07-21 | 系統 | server.py + index.html | 新增標籤統計(Phase3):增量更新(create+1/delete-1)、手動重算、查詢端點;封存不觸發統計異動 | 觸發原因:Master Spec v3.0 Phase3實作
 2026-07-21 | 系統 | server.py + index.html | 新增成效登記(Phase4):/performance/create、/performance/<brand>查詢,含懸空參照軟性檢查 | 觸發原因:Master Spec v3.0 Phase4實作
+2026-07-21 | 系統 | server.py | 新增對外API(Phase5):/api/*前綴+X-API-Key驗證,複用既有內部handler邏輯 | 觸發原因:Master Spec v3.0 Phase5實作,為Phase6 DA Trainer整合鋪路
