@@ -1,6 +1,6 @@
 # providers/gemini.py — Google Gemini API adapter。
 # 介面契約:generate(system_text, user_text, env) -> {"text": str}
-# 零第三方依賴,僅urllib。金鑰只進URL query string(Gemini API設計如此),
+# 零第三方依賴,僅urllib。金鑰透過x-goog-api-key header傳遞(非URL query string),
 # 禁止寫入任何log或例外訊息。
 import json
 import urllib.error
@@ -11,11 +11,18 @@ TIMEOUT_SEC = 120
 
 
 def generate(system_text, user_text, env):
-    model = env.get("MODEL", "gemini-2.5-flash")
+    """
+    驗證方式:x-goog-api-key header(Google現行標準,非URL query參數)。
+    理由:URL參數會使金鑰進入伺服器存取日誌、代理紀錄等多處,header方式無此外洩面。
+    對齊Google 2026年9月起Standard Key全面失效、遷移至Auth Key的時程——
+    Auth Key與Standard Key在呼叫端寫法完全同構,此改動本身不因遷移而需要
+    進一步調整程式碼,差異僅在Google後台簽發的金鑰格式(AQ.Ab...而非AIza...)。
+    """
+    model = env.get("MODEL", "gemini-flash-latest")
     api_key = env.get("GEMINI_API_KEY", "")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY 未設定")
-    url = "%s/%s:generateContent?key=%s" % (API_BASE, model, api_key)
+    url = "%s/%s:generateContent" % (API_BASE, model)
     body = {
         "system_instruction": {"parts": [{"text": system_text}]},
         "contents": [{"role": "user", "parts": [{"text": user_text}]}],
@@ -23,7 +30,10 @@ def generate(system_text, user_text, env):
     req = urllib.request.Request(
         url,
         data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "x-goog-api-key": api_key,
+        },
         method="POST",
     )
     try:
