@@ -24,3 +24,4 @@
 2026-07-21 | 系統 | server.py | 修復log_message對/api/路徑的雙重記錄問題,外部呼叫改為僅記錄一行[API]標記 | 觸發原因:Phase5驗收後發現的日誌縫隙(見governance-lessons v1.4)
 2026-07-21 | 系統 | server.py | 新增Skill封裝(Phase8.1):regenerate_skill()函式+端點,五筆廣告類型SKILL.md已產生 | 觸發原因:Master Spec v3.0 Phase8.1實作,start_all.py因依賴DA Trainer暫緩
 2026-07-21 | 系統 | server.py | 補齊/api/revisions系列端點白名單(revisions/revision/<id>/revision_stats/recompute),解決DA Trainer整合缺口 | 觸發原因:DA Trainer交接文件§1.2指出的已知缺口
+2026-07-22 | 系統 | server.py + index.html | 移除prompts模板系統,/generate改為讀取ad_types作為唯一廣告類型來源,system_base規則內嵌程式碼 | 觸發原因:使用者需求——生成頁廣告類型應對應真實ad_types資料而非寫死IG/FB/SEO
