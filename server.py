@@ -21,7 +21,6 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 ROOT       = os.path.dirname(os.path.abspath(__file__))
-PROMPT_DIR = os.path.join(ROOT, "prompts")   # 模板仍保留本機(供離線編輯參考)
 CHANGELOG  = os.path.join(ROOT, "rules_changelog.md")
 
 sys.path.insert(0, os.path.join(ROOT, "local_kit"))
@@ -29,11 +28,9 @@ from json_collection import Collection   # noqa: E402
 from config_loader import load_config    # noqa: E402
 from logger import log as kit_log        # noqa: E402
 
-AD_TYPES         = {"ig": "wedding_ig.md", "fb": "wedding_fb.md", "seo": "wedding_seo.md"}
 VALID_PERF_TAGS  = {"high", "low", "未標記"}
 VERSION_DELIM    = "===VERSION==="
 MAX_VERSIONS     = 5
-PROMPT_WHITELIST = set(AD_TYPES.values()) | {"system_base.md"}
 
 # GitHub Contents API paths
 GH_BRAND_PREFIX    = "data/brands/"
@@ -92,11 +89,6 @@ def _load_env():
                 k, v = line.split("=", 1)
                 env[k.strip()] = v.strip()
     return env
-
-
-def _read_local(path):
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
 
 
 def _safe_brand_name(name):
@@ -565,10 +557,6 @@ class Handler(BaseHTTPRequestHandler):
                 self._handle_brands()
             elif path.startswith("/brand/"):
                 self._handle_brand(path[len("/brand/"):])
-            elif path == "/prompts":
-                self._handle_get_prompts()
-            elif path.startswith("/prompt/"):
-                self._handle_get_prompt(path[len("/prompt/"):])
             elif path == "/styles":
                 self._handle_get_styles()
             elif path == "/ad_types":
@@ -612,8 +600,6 @@ class Handler(BaseHTTPRequestHandler):
                 self._handle_tag()
             elif path == "/brands/create":
                 self._handle_brand_create()
-            elif path == "/prompts/save":
-                self._handle_prompt_save()
             elif path == "/styles/add":
                 self._handle_style_add()
             elif path == "/ad_types/create":
@@ -714,46 +700,6 @@ class Handler(BaseHTTPRequestHandler):
         except RuntimeError as e:
             self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
         self._send(200, {"deleted": brand_id})
-
-    # ── 模板:GET /prompts /prompt/<f>,POST /prompts/save(本機,未受Phase1影響) ──
-    def _handle_get_prompts(self):
-        files = [f for f in os.listdir(PROMPT_DIR) if f.endswith(".md")]
-        self._send(200, {"prompts": sorted(files)})
-
-    def _handle_get_prompt(self, filename):
-        if filename not in PROMPT_WHITELIST:
-            self._send(403, {"error": "file not in whitelist"}); return
-        fp = os.path.join(PROMPT_DIR, filename)
-        if not os.path.isfile(fp):
-            self._send(404, {"error": "prompt not found"}); return
-        self._send(200, {"filename": filename, "content": _read_local(fp)})
-
-    def _handle_prompt_save(self):
-        body, err = self._read_body()
-        if err: self._send(400, {"error": err}); return
-        env = self._env_or_503()
-        if not env: return
-        filename = body.get("filename", "")
-        content  = body.get("content", "")
-        summary  = body.get("summary", "內容更新").strip() or "內容更新"
-        if filename not in PROMPT_WHITELIST:
-            self._send(403, {"error": "file not in whitelist"}); return
-        if not content.strip():
-            self._send(400, {"error": "content is empty"}); return
-        fp = os.path.join(PROMPT_DIR, filename)
-        with open(fp, "w", encoding="utf-8") as f:
-            f.write(content)
-        gh_path = "prompts/" + filename
-        try:
-            _, sha = _gh_get(env, gh_path)
-        except FileNotFoundError:
-            sha = None
-        _gh_put(env, gh_path, content,
-                "prompts: %s — %s [auto-backup]" % (filename, summary), sha)
-        now  = datetime.now().strftime("%Y-%m-%d")
-        line = "%s | prompts | %s | %s | 觸發原因:UI 編輯器存檔" % (now, filename, summary)
-        _append_changelog_gh(env, line)
-        self._send(200, {"saved": filename, "github": "pushed"})
 
     # ── 文風:GET /styles,POST /styles/add,DELETE /style/<id> ────────────────
     def _handle_get_styles(self):
@@ -1109,12 +1055,10 @@ class Handler(BaseHTTPRequestHandler):
         env = self._env_or_503()
         if not env: return
         brand       = body.get("brand", "")
-        ad_type     = body.get("ad_type", "")
+        ad_type_id  = body.get("ad_type", "")   # 現為 ad_types 的 type_id,如 "google_pmax_leads"
         versions    = body.get("versions", 1)
         style_label = body.get("style_label", "")   # 現為 style_id
         style_free  = body.get("style_free", "")
-        if ad_type not in AD_TYPES:
-            self._send(400, {"error": "ad_type must be one of: ig, fb, seo"}); return
         if not isinstance(versions, int) or not (1 <= versions <= MAX_VERSIONS):
             self._send(400, {"error": "versions must be int 1..%d" % MAX_VERSIONS}); return
         if not _safe_brand_name(brand):
@@ -1124,6 +1068,16 @@ class Handler(BaseHTTPRequestHandler):
         except FileNotFoundError:
             # Master Spec §3.5:brand不存在時/generate直接回400,不靜默用空字串繼續
             self._send(400, {"error": "brand not found"}); return
+        except ValueError as e:
+            self._send(500, {"error": str(e)}); return
+        except RuntimeError as e:
+            self._send(502, {"error": "GitHub 連線失敗:%s" % e}); return
+        if not ad_type_id:
+            self._send(400, {"error": "ad_type為必填,請提供廣告類型代號"}); return
+        try:
+            ad_type_data = ad_types.get(env, ad_type_id)
+        except FileNotFoundError:
+            self._send(404, {"error": "廣告類型不存在:%s" % ad_type_id}); return
         except ValueError as e:
             self._send(500, {"error": str(e)}); return
         except RuntimeError as e:
@@ -1152,10 +1106,38 @@ class Handler(BaseHTTPRequestHandler):
                 pass  # 文風不存在/讀取失敗時靜默略過,不阻斷生成
         if style_free:
             style_block += "\n\n## 補充文風描述\n%s" % style_free
-        system_text = _read_local(os.path.join(PROMPT_DIR, "system_base.md"))
-        type_text   = _read_local(os.path.join(PROMPT_DIR, AD_TYPES[ad_type]))
+        # 系統基底規則內嵌(取代原本讀取prompts/system_base.md,§A規則1:事實紅線與
+        # 文風基準逐字保留自Phase2既有版本,僅移除檔案讀取這個結構,語意內容不變)
+        system_text = (
+            "你是婚紗攝影產業的行銷文案寫手。輸出一律使用台灣用語的繁體中文。\n\n"
+            "## 事實紅線\n"
+            "- 只能使用「品牌資料」段落中明文載明的資訊。\n"
+            "- 禁止捏造價格、地址、方案內容、得獎紀錄、客戶見證、任何未載明的承諾。\n"
+            "- 品牌資料缺漏處以「(待補:欄位名)」標示,不得自行填空。\n"
+            "- 遵守品牌資料中的「禁用詞 / 不可承諾事項」。\n\n"
+            "## 文風基準\n"
+            "- 對象為台灣準新人,語氣溫暖但不浮誇。\n"
+            "- 禁止療效式、保證式用語(如「保證最美」「絕對滿意」)。"
+        )
+        # 廣告類型規格(取代原本讀取prompts/wedding_ig|fb|seo.md,改讀ad_types資料)
+        ad_type_block = (
+            "## 廣告類型:%s\n"
+            "適用平台:%s\n"
+            "特性說明:%s\n"
+            "長度規範:%s\n"
+            "CTA風格:%s\n"
+        ) % (
+            ad_type_data.get("name", ad_type_id),
+            ad_type_data.get("platform", "(待填)"),
+            ad_type_data.get("characteristics", "(待填)"),
+            ad_type_data.get("length_guide", "(待填)"),
+            ad_type_data.get("cta_style", "(待填)"),
+        )
+        sample_structure = ad_type_data.get("sample_structure", [])
+        if sample_structure:
+            ad_type_block += "建議結構:\n" + "\n".join("- %s" % s for s in sample_structure) + "\n"
         user_text = (
-            type_text + style_block
+            ad_type_block + style_block
             + "\n\n---\n\n## 品牌資料(僅可使用以下內容,禁止補充未載明事實)\n\n"
             + brand_readable
             + "\n\n---\n\n請產出 %d 個版本,版本之間僅以獨立一行「%s」分隔,不加編號標題,不加任何前後說明。"
@@ -1192,8 +1174,12 @@ class Handler(BaseHTTPRequestHandler):
         prompt_ver = body.get("prompt_version", "")
         if not _safe_brand_name(brand):
             self._send(400, {"error": "invalid brand_id"}); return
-        if ad_type not in AD_TYPES:
-            self._send(400, {"error": "ad_type must be one of: ig, fb, seo"}); return
+        try:
+            ad_types.get(env, ad_type)
+        except FileNotFoundError:
+            self._send(400, {"error": "廣告類型不存在:%s" % ad_type}); return
+        except (ValueError, RuntimeError):
+            pass  # 讀取異常不阻斷封存本身,archive為既有內容的備份動作
         if perf_tag not in VALID_PERF_TAGS:
             self._send(400, {"error": "performance_tag must be one of: high, low, 未標記"}); return
         if not content.strip():
@@ -1259,9 +1245,9 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8765"))
     print("server.py Phase1 listening on http://localhost:%d" % port)
-    print("GET  /brands /brand/<id> /prompts /prompt/<f> /styles /ad_types /ad_type/<id> /health")
+    print("GET  /brands /brand/<id> /styles /ad_types /ad_type/<id> /health")
     print("     /revisions /revision/<id> /revision_stats /revision_stats/recompute /performance/<brand>")
-    print("POST /brands/create /prompts/save /styles/add /ad_types/create /generate /archive /tag")
+    print("POST /brands/create /styles/add /ad_types/create /generate /archive /tag")
     print("     /revisions/create /performance/create")
     print("DEL  /brand/<id> /style/<id> /ad_type/<id> /revision/<id>")
     print("API  (X-API-Key) GET /api/brands /api/brand/<id> /api/performance/<brand> /api/health, POST /api/generate")
