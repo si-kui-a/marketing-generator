@@ -475,8 +475,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def _env_or_503(self):
         env = _load_env()
-        missing = [k for k in ("PROVIDER", "API_KEY", "MODEL", "GITHUB_TOKEN", "GITHUB_REPO")
-                   if not env.get(k)]
+        # PROVIDER決定實際需要哪一把供應商金鑰,不可寫死API_KEY,否則單獨設定
+        # GEMINI_API_KEY(不設定Anthropic的API_KEY)會被誤判為「設定未完成」,
+        # 讓§A規則2「兩把金鑰互不干擾」的設計目標在此處失效(新增gemini供應商時發現)。
+        provider_key = {"anthropic": "API_KEY", "gemini": "GEMINI_API_KEY"}.get(env.get("PROVIDER", ""))
+        required = ["PROVIDER", "MODEL", "GITHUB_TOKEN", "GITHUB_REPO"]
+        if provider_key:
+            required.append(provider_key)
+        missing = [k for k in required if not env.get(k)]
         if missing:
             self._send(503, {"error": "設定未完成,.env 缺少:" + ", ".join(missing)})
             return None
