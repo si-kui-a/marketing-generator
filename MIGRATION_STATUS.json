@@ -36,5 +36,14 @@
         "timestamp": "2026-07-21T02:43:31"
       }
     ]
+  },
+  "prompts": {
+    "history": [
+      {
+        "status": "moved",
+        "note": "git mv prompts -> prompts_deprecated",
+        "timestamp": "2026-07-22T09:08:01"
+      }
+    ]
   }
 }
