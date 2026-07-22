@@ -46,15 +46,6 @@ button.ghost   { background: none; border: 1px solid #ccc; padding: .35rem .8rem
 .info { color: #137333; margin: .4rem 0; font-size: .9rem; }
 .list-item { display: flex; justify-content: space-between; align-items: center; padding: .5rem 0; border-bottom: 1px solid #eee; }
 .extra-field { display: flex; gap: .5rem; margin-top: .4rem; }
-/* 模板卡片 */
-.prompt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .8rem; margin-bottom: 1rem; }
-.prompt-card { border: 2px solid #ddd; border-radius: 8px; padding: .8rem; cursor: pointer; transition: border-color .15s; background: #fff; }
-.prompt-card:hover { border-color: #1a73e8; }
-.prompt-card.selected { border-color: #1a73e8; background: #f0f6ff; }
-.prompt-card h3 { font-size: .9rem; margin: 0 0 .4rem; color: #1a73e8; }
-.prompt-card ul { margin: 0; padding-left: 1.1rem; font-size: .82rem; color: #555; }
-.prompt-card ul li { margin: .2rem 0; }
-#promptEditor { width: 100%; min-height: 320px; font-family: monospace; font-size: .9rem; }
 /* 文風 / 廣告類型卡片 */
 .style-item, .adtype-item { display: flex; justify-content: space-between; align-items: flex-start; padding: .6rem 0; border-bottom: 1px solid #eee; gap: .5rem; }
 .style-item .style-info, .adtype-item .adtype-info { flex: 1; }
@@ -71,7 +62,6 @@ footer { margin-top: 2rem; font-size: .8rem; color: #888; text-align: center; pa
   <nav>
     <button class="active" onclick="switchTab('generate',this)">生成文案</button>
     <button onclick="switchTab('brands',this)">品牌管理</button>
-    <button onclick="switchTab('prompts',this)">模板編輯</button>
     <button onclick="switchTab('styles',this)">文風管理</button>
     <button onclick="switchTab('adtypes',this)">廣告類型</button>
     <button onclick="switchTab('stats',this)">案例統計</button>
@@ -98,11 +88,7 @@ footer { margin-top: 2rem; font-size: .8rem; color: #888; text-align: center; pa
     <label>品牌</label>
     <select id="brand"></select>
     <label>廣告類型</label>
-    <select id="adtype">
-      <option value="ig">IG</option>
-      <option value="fb">FB</option>
-      <option value="seo">SEO</option>
-    </select>
+    <select id="adtype"></select>
     <label>版本數(1–5)</label>
     <input id="versions" type="number" min="1" max="5" value="3">
     <label>文風(選單)</label>
@@ -136,60 +122,6 @@ footer { margin-top: 2rem; font-size: .8rem; color: #888; text-align: center; pa
   <fieldset>
     <legend>現有品牌</legend>
     <div id="brandList">載入中…</div>
-  </fieldset>
-</div>
-<!-- ── 模板編輯 ── -->
-<div id="tab-prompts" class="tab">
-  <fieldset>
-    <legend>選擇模板</legend>
-    <div class="prompt-cards">
-      <div class="prompt-card" onclick="selectPrompt('system_base.md',this)">
-        <h3>系統基底</h3>
-        <ul>
-          <li>適用場景:所有廣告類型</li>
-          <li>目標:設定事實紅線與語氣基準</li>
-          <li>用途:修改品牌事實守則、禁用詞規範</li>
-        </ul>
-      </div>
-      <div class="prompt-card" onclick="selectPrompt('wedding_ig.md',this)">
-        <h3>IG 貼文</h3>
-        <ul>
-          <li>適用場景:Instagram 動態 / 限時動態</li>
-          <li>目標:停住滑動、引導私訊</li>
-          <li>用途:調整字數、首句結構、hashtag 數量</li>
-        </ul>
-      </div>
-      <div class="prompt-card" onclick="selectPrompt('wedding_fb.md',this)">
-        <h3>FB 貼文</h3>
-        <ul>
-          <li>適用場景:Facebook 動態牆</li>
-          <li>目標:敘事說服、觸及長輩決策者</li>
-          <li>用途:調整篇幅、段落結構、CTA 形式</li>
-        </ul>
-      </div>
-      <div class="prompt-card" onclick="selectPrompt('wedding_seo.md',this)">
-        <h3>SEO 文案</h3>
-        <ul>
-          <li>適用場景:官網文章、Google 搜尋結果</li>
-          <li>目標:提升搜尋排名、吸引點擊</li>
-          <li>用途:調整關鍵字密度、meta description 字數</li>
-        </ul>
-      </div>
-    </div>
-  </fieldset>
-  <fieldset id="promptEditBox" style="display:none">
-    <legend id="promptEditTitle">編輯中</legend>
-    <label>異動摘要(將寫入 rules_changelog.md 並 push GitHub)</label>
-    <input id="promptSummary" type="text" placeholder="例:調整字數上限為 120 字">
-    <label>模板內容</label>
-    <textarea id="promptEditor" placeholder="選擇上方模板卡片後內容將載入此處…"></textarea>
-    <p>
-      <button class="primary" onclick="savePrompt()">儲存並推送 GitHub</button>
-      <span id="promptMsg" style="margin-left:.8rem;font-size:.9rem"></span>
-    </p>
-    <p style="font-size:.8rem;color:#888;margin-top:.2rem">
-      ⚠️ server 未連線時可在此編輯並暫存,連線後儲存才會寫入檔案與 GitHub。
-    </p>
   </fieldset>
 </div>
 <!-- ── 文風管理 ── -->
@@ -282,6 +214,27 @@ async function init() {
   }
   checkGitHub();
   loadStyleOptions();
+  loadAdTypesForGenerate();
+}
+async function loadAdTypesForGenerate() {
+  const sel = $("adtype");
+  try {
+    const d = await (await fetch(API + "/ad_types")).json();
+    if (!d.ad_types.length) {
+      sel.innerHTML = '<option value="">尚無廣告類型,請先至「廣告類型」分頁建立</option>';
+      return;
+    }
+    sel.innerHTML = "";
+    for (const id of d.ad_types) {
+      const o = document.createElement("option");
+      o.value = id;
+      try {
+        const detail = await (await fetch(API + "/ad_type/" + encodeURIComponent(id))).json();
+        o.textContent = (detail.data && detail.data.name) || id;
+      } catch { o.textContent = id; }
+      sel.appendChild(o);
+    }
+  } catch {}
 }
 async function checkGitHub() {
   try {
@@ -469,45 +422,6 @@ async function loadBrandList() {
     });
   } catch { $("brandList").textContent = "載入失敗,請確認 server 已啟動"; }
 }
-// ── 模板卡片 ──────────────────────────────────────────────────────────────────
-let _selectedPromptFile = null;
-function selectPrompt(fn, card) {
-  document.querySelectorAll(".prompt-card").forEach(c => c.classList.remove("selected"));
-  card.classList.add("selected");
-  _selectedPromptFile = fn;
-  loadPrompt(fn);
-}
-async function loadPrompt(fn) {
-  $("promptEditTitle").textContent = "編輯中:" + fn;
-  $("promptSummary").value = ""; $("promptMsg").textContent = "";
-  $("promptEditor").value = "載入中…"; $("promptEditBox").style.display = "";
-  try {
-    const r = await fetch(API + "/prompt/" + fn);
-    if (!r.ok) {
-      const d = await r.json();
-      $("promptEditor").value = "(載入失敗:" + (d.error || r.status) + ")\n\n請確認 server 已啟動。";
-      return;
-    }
-    const d = await r.json();
-    $("promptEditor").value = d.content;
-  } catch {
-    $("promptEditor").value = "(server 未連線,無法載入)\n\n請先執行 python server.py,再點選模板卡片。";
-  }
-}
-async function savePrompt() {
-  const fn = _selectedPromptFile;
-  if (!fn) { $("promptMsg").innerHTML = '<span class="warn">請先選擇模板</span>'; return; }
-  const content = $("promptEditor").value;
-  if (content.startsWith("(")) { $("promptMsg").innerHTML = '<span class="warn">內容未載入,無法儲存</span>'; return; }
-  const summary = $("promptSummary").value.trim() || "內容更新";
-  const r = await fetch(API + "/prompts/save", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({filename: fn, content, summary})
-  });
-  const d = await r.json();
-  if (!r.ok) { $("promptMsg").textContent = "錯誤:" + d.error; return; }
-  $("promptMsg").innerHTML = `<span class="info">✓ 已儲存並推送 GitHub</span>`;
-}
 // ── 文風管理 ──────────────────────────────────────────────────────────────────
 async function loadStyleList() {
   try {
@@ -557,7 +471,7 @@ async function createAdTypeQuick() {
   if (!r.ok) { $("adTypeMsg").innerHTML = `<span class="warn">${d.error}</span>`; return; }
   $("adTypeMsg").innerHTML = `<span class="info">已建立「${type_id}」,未自動解析,請至清單點開手動分欄</span>`;
   $("newAdTypeId").value = ""; $("newAdTypeRaw").value = "";
-  loadAdTypeList();
+  loadAdTypeList(); loadAdTypesForGenerate();
 }
 async function loadAdTypeList() {
   try {
@@ -573,7 +487,7 @@ async function loadAdTypeList() {
       btn.textContent = "刪除";
       bindHoldToDelete(btn, () => {
         fetch(API + "/ad_type/" + encodeURIComponent(id), {method: "DELETE"})
-          .then(r => r.json()).then(() => loadAdTypeList());
+          .then(r => r.json()).then(() => { loadAdTypeList(); loadAdTypesForGenerate(); });
       });
       row.appendChild(info); row.appendChild(btn); el.appendChild(row);
       // 未分欄項目(仍有 _raw_paste_pending_review 內容)顯示紅點與原始文字
