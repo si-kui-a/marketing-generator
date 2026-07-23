@@ -112,6 +112,14 @@ footer { margin-top: 2rem; font-size: .8rem; color: #888; text-align: center; pa
     <textarea id="newBrandReviews" placeholder="例:「攝影師很有耐心,成品超美」— 顧客 A"></textarea>
     <label>活動頁面文案</label>
     <textarea id="newBrandActivity" placeholder="例:2026 夏季方案優惠截止 8/31"></textarea>
+    <label>顧客口碑(每則一行,需由你本人依精簡規則改寫,不貼原始長評論)</label>
+    <textarea id="newBrandTestimonials" placeholder="例:攝影師很有耐心,成品超美 — 網友真實評價"></textarea>
+    <label>地址</label>
+    <input id="newBrandAddress" type="text">
+    <label>電話</label>
+    <input id="newBrandPhone" type="text">
+    <label>營業時間</label>
+    <input id="newBrandHours" type="text" placeholder="例:週二至週日 11:00-20:00">
     <div id="extraFields"></div>
     <p>
       <button class="ghost" onclick="addExtraField()">＋ 新增自訂欄位</button>
@@ -384,17 +392,26 @@ async function createBrand() {
     const label = inputs[0].value.trim(), content = inputs[1].value.trim();
     if (label) extras.push({label, content});
   });
+  const testimonials = $("newBrandTestimonials").value.split("\n").map(s => s.trim()).filter(Boolean);
+  const contact_info = {
+    address: $("newBrandAddress").value.trim(),
+    phone: $("newBrandPhone").value.trim(),
+    hours: $("newBrandHours").value.trim(),
+  };
   const r = await fetch(API + "/brands/create", {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({name, axis: $("newBrandAxis").value.trim(),
       reviews: $("newBrandReviews").value.trim(),
-      activity: $("newBrandActivity").value.trim(), extras})
+      activity: $("newBrandActivity").value.trim(), extras,
+      testimonials, contact_info})
   });
   const d = await r.json();
   if (!r.ok) { $("brandMsg").innerHTML = `<span class="warn">${d.error}</span>`; return; }
   $("brandMsg").innerHTML = `<span class="info">品牌「${name}」已新增並備份至 GitHub</span>`;
   $("newBrandName").value = ""; $("newBrandAxis").value = "";
   $("newBrandReviews").value = ""; $("newBrandActivity").value = "";
+  $("newBrandTestimonials").value = ""; $("newBrandAddress").value = "";
+  $("newBrandPhone").value = ""; $("newBrandHours").value = "";
   $("extraFields").innerHTML = "";
   loadBrandList();
   const bd = await (await fetch(API + "/brands")).json();

@@ -52,6 +52,8 @@ STYLE_SLUG_TABLE = {
 BRAND_DEFAULTS = {
     "positioning": "(待填)", "target_audience": "(待填)",
     "selling_points": [], "legacy_notes": [],
+    "testimonials": [],
+    "contact_info": {"address": "", "phone": "", "hours": ""},
 }
 STYLE_DEFAULTS = {"description": "(待填)", "sample_copy": ""}
 AD_TYPE_DEFAULTS = {
@@ -696,6 +698,8 @@ class Handler(BaseHTTPRequestHandler):
         reviews  = body.get("reviews", "").strip()
         activity = body.get("activity", "").strip()
         extras   = body.get("extras", [])
+        testimonials = body.get("testimonials", [])
+        contact_info = body.get("contact_info", {})
         if not _safe_brand_name(name):
             self._send(400, {"error": "invalid brand name"}); return
         legacy_notes = [
@@ -704,8 +708,13 @@ class Handler(BaseHTTPRequestHandler):
         ] + [{"label": e.get("label", ""), "content": e.get("content", "") or "(待填)"}
              for e in (extras if isinstance(extras, list) else []) if e.get("label")]
         data = {"brand_id": name, "name": name, "positioning": axis or "(待填)"}
+        extra_fields = {"legacy_notes": legacy_notes}
+        if testimonials:
+            extra_fields["testimonials"] = testimonials
+        if contact_info:
+            extra_fields["contact_info"] = contact_info
         try:
-            brands.create(env, name, data, extra_fields={"legacy_notes": legacy_notes})
+            brands.create(env, name, data, extra_fields=extra_fields)
         except FileExistsError:
             self._send(409, {"error": "品牌已存在,請使用其他名稱"}); return
         except RuntimeError as e:
@@ -1115,6 +1124,20 @@ class Handler(BaseHTTPRequestHandler):
         )
         for note in brand_data.get("legacy_notes", []):
             brand_readable += "%s:%s\n" % (note.get("label", ""), note.get("content", ""))
+        # testimonials由使用者本人依精簡規則手動改寫填入,非AI即時摘要原始評論
+        # (§A規則1:此為架構決策核心限制,不得自行擴充為AI自動摘要邏輯)
+        if brand_data.get("testimonials"):
+            brand_readable += (
+                "可用顧客口碑(擇1-2則自然融入,不可虛構未提供的評論):\n"
+                + "\n".join(brand_data["testimonials"]) + "\n"
+            )
+        contact_info = brand_data.get("contact_info", {})
+        if contact_info.get("address"):
+            brand_readable += (
+                "聯絡資訊(需完整帶出):店名%s、地址%s、電話%s、營業時間%s\n"
+                % (brand_data.get("name", ""), contact_info.get("address", ""),
+                   contact_info.get("phone", ""), contact_info.get("hours", ""))
+            )
         style_block = ""
         if style_label:
             try:
