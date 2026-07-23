@@ -469,7 +469,12 @@ async function createAdTypeQuick() {
   });
   const d = await r.json();
   if (!r.ok) { $("adTypeMsg").innerHTML = `<span class="warn">${d.error}</span>`; return; }
-  $("adTypeMsg").innerHTML = `<span class="info">已建立「${type_id}」,未自動解析,請至清單點開手動分欄</span>`;
+  $("adTypeMsg").innerHTML = `<span class="info">
+    已建立「${type_id}」(未自動解析)。<br>
+    建議手動分欄方式:<br>
+    ・撰寫風格範例段落 → 填入「文風管理」的範例文案欄位<br>
+    ・字數/結構規則 → 填入本廣告類型的 length_guide、sample_structure 欄位
+  </span>`;
   $("newAdTypeId").value = ""; $("newAdTypeRaw").value = "";
   loadAdTypeList(); loadAdTypesForGenerate();
 }
