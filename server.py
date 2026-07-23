@@ -29,7 +29,6 @@ from config_loader import load_config    # noqa: E402
 from logger import log as kit_log        # noqa: E402
 
 VALID_PERF_TAGS  = {"high", "low", "未標記"}
-VERSION_DELIM    = "===VERSION==="
 MAX_VERSIONS     = 5
 
 # GitHub Contents API paths
@@ -444,6 +443,26 @@ description: >
     with open(os.path.join(skill_dir, "SKILL.md"), "w", encoding="utf-8") as f:
         f.write(content)
     return os.path.join(skill_dir, "SKILL.md")
+
+
+# ── /generate 序列生成組裝(避免多版本重複用字)──────────────────────────────────
+def _build_user_text(ad_type_block, style_block, brand_readable, prior_versions):
+    """
+    prior_versions:本批次已成功產出的版本文字清單,用於避免重複。
+    每個版本各自獨立呼叫AI(而非一次呼叫後用VERSION_DELIM切分),序列執行比平行慢
+    (N版本需N次等待時間相加),但這是避免重複的必要代價,且不增加AI呼叫次數,
+    不違反「最低AI依賴」原則。
+    """
+    parts = [ad_type_block, style_block]
+    if prior_versions:
+        joined = "\n---\n".join(prior_versions)
+        parts.append(
+            "\n\n## 避免重複\n以下句子已在本批次前面版本使用過,"
+            "本版禁止重複或高度相似的表達方式(含相同比喻、相同開場句型):\n%s" % joined
+        )
+    parts.append("\n\n---\n\n## 品牌資料(僅可使用以下內容,禁止補充未載明事實)\n\n" + brand_readable)
+    parts.append("\n\n---\n\n請只產出這一個版本的文案本身,不加編號標題,不加任何前後說明。")
+    return "".join(parts)
 
 
 # ── Handler ───────────────────────────────────────────────────────────────────
@@ -1142,27 +1161,33 @@ class Handler(BaseHTTPRequestHandler):
         sample_structure = ad_type_data.get("sample_structure", [])
         if sample_structure:
             ad_type_block += "建議結構:\n" + "\n".join("- %s" % s for s in sample_structure) + "\n"
-        user_text = (
-            ad_type_block + style_block
-            + "\n\n---\n\n## 品牌資料(僅可使用以下內容,禁止補充未載明事實)\n\n"
-            + brand_readable
-            + "\n\n---\n\n請產出 %d 個版本,版本之間僅以獨立一行「%s」分隔,不加編號標題,不加任何前後說明。"
-            % (versions, VERSION_DELIM)
-        )
         try:
-            mod    = importlib.import_module("providers.%s" % env["PROVIDER"])
-            result = mod.generate(system_text, user_text, env)
+            mod = importlib.import_module("providers.%s" % env["PROVIDER"])
         except ModuleNotFoundError:
             self._send(400, {"error": "unknown provider: %s" % env["PROVIDER"]}); return
-        except Exception as e:
-            _append_log("error.log", "%s | /generate | provider_error | %s" % (
-                self.log_date_time_string(), repr(e)))
-            self._send(502, {"error": "供應商呼叫失敗,詳見 logs/error.log"}); return
-        text  = result.get("text", "")
-        parts = [p.strip() for p in text.split(VERSION_DELIM) if p.strip()]
-        payload = {"versions": parts}
-        if len(parts) != versions:
-            payload["warning"] = "回傳版本數 %d 與要求 %d 不符,請人工檢視" % (len(parts), versions)
+        # 每個版本各自獨立呼叫,後續版本帶入前面已產出的版本以避免重複用字,
+        # 取代原本「一次呼叫後用VERSION_DELIM切分」的作法(該作法在實測中容易讓
+        # 多版本語意高度重複)。單版失敗不中斷整批次,繼續嘗試下一版。
+        results = []
+        failed_count = 0
+        for i in range(versions):
+            user_text = _build_user_text(ad_type_block, style_block, brand_readable, results)
+            try:
+                result = mod.generate(system_text, user_text, env)
+                text = result.get("text", "").strip()
+                if text:
+                    results.append(text)
+                else:
+                    failed_count += 1
+            except Exception as e:
+                _append_log("error.log", "%s | /generate | provider_error(version %d/%d) | %s" % (
+                    self.log_date_time_string(), i + 1, versions, repr(e)))
+                failed_count += 1
+        if not results:
+            self._send(502, {"error": "全部版本生成失敗,詳見 logs/error.log"}); return
+        payload = {"versions": results}
+        if failed_count > 0:
+            payload["warning"] = "共 %d 版成功,%d 版失敗,請人工檢視" % (len(results), failed_count)
         self._send(200, payload)
 
     # ── POST /archive ─────────────────────────────────────────────────────────
